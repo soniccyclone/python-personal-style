@@ -295,3 +295,105 @@ def find_first(items: list[str], query: str) -> str | NotFound:
   same file as =find_first=. In a multi-module project, is there a
   shared catalog of absence types, or does each module define its
   own? Deferred to multi-file stage.
+
+** TODO 003 — =003-point.py= — dataclass with a method
+
+File: [[file:003-point.py][003-point.py]]
+
+Presented version:
+
+#+begin_src python
+from dataclasses import dataclass
+from math import hypot
+
+
+@dataclass(frozen=True)
+class Point:
+    x: float
+    y: float
+
+    def distance_to(self, other: "Point") -> float:
+        return hypot(self.x - other.x, self.y - other.y)
+#+end_src
+
+*** Question 1 — Record type: =@dataclass=, =NamedTuple=, or plain class?
+
+Python gives three built-in ways to model a "two floats with a name":
+
+- (a) =@dataclass(frozen=True)= (presented). Immutable, =__eq__= /
+  =__hash__= / =__repr__= generated. Attribute access. Supports
+  methods naturally. No tuple-unpacking ambiguity (=p.x= is always
+  =p.x=, never =p[0]=).
+- (b) =typing.NamedTuple= subclass. Immutable by construction, tuple
+  semantics (unpack, indexable), ~25% less memory than a dataclass,
+  =__eq__= / =__hash__= via tuple. Methods allowed but feel grafted.
+  Callers can treat it as a tuple which is sometimes wanted and
+  sometimes a leak.
+- (c) Plain class with =__init__=, =__eq__=, =__hash__=,
+  =__repr__= hand-rolled. Most flexibility, most ceremony. Only
+  justified when the class does something the generators can't
+  (custom hashing, lazy fields, inheritance games).
+
+Nathan's answer: /TBD/
+
+*** Question 2 — =frozen=True= by default?
+
+The presented version is =frozen=True=. Frozen dataclasses are
+immutable (attribute assignment raises), hashable by default, and
+safer as dict keys / set members. Mutable dataclasses are what you
+get without =frozen= — =Point(0, 0).x = 1= works, and =__hash__= is
+set to =None= unless you opt in.
+
+- (a) Default =frozen=True= for all record/value types; reserve mutable
+  dataclasses for things that genuinely own state over time (caches,
+  builders).
+- (b) Default mutable; add =frozen=True= only when needed for hashing
+  or explicit immutability.
+
+Nathan's answer: /TBD/
+
+*** Question 3 — Methods on a data record
+
+The presented version has =distance_to= as a method. The alternative
+is a free function:
+
+#+begin_src python
+def distance(a: Point, b: Point) -> float:
+    return hypot(a.x - b.x, a.y - b.y)
+#+end_src
+
+The Hickey / data-orientation position is that data records should be
+passive — just named fields — and behavior lives in free functions
+that can be composed, shadowed, and tested independently. Methods
+conflate "what this thing is" with "what you can do with it," and
+encourage inheritance-driven elaboration that obscures the data.
+
+The OO / encapsulation position is that =p.distance_to(q)= reads
+more naturally than =distance(p, q)= and groups related behavior
+with the data.
+
+- (a) Methods on records are fine for natural "self-referential"
+  behavior (=distance_to=, =translate=, =magnitude=).
+- (b) Records are passive; all behavior lives in free functions.
+- (c) Records carry only behavior that's inseparable from the type
+  (e.g. a custom =__repr__=); everything else is a free function.
+
+Nathan's answer: /TBD/
+
+*** Question 4 — Forward reference style
+
+=def distance_to(self, other: "Point")= uses a string literal for
+the self-referential annotation because =Point= isn't yet defined
+when the method signature is parsed. The alternatives:
+
+- (a) Quoted string (presented): =other: "Point"=.
+- (b) =from __future__ import annotations= at the top of the module,
+  then all annotations are strings at runtime and =other: Point= just
+  works.
+- (c) Python 3.12+ =Self= from =typing=: =other: Self=.
+
+Nathan's answer: /TBD/
+
+*** Rule
+
+/To be recorded once Nathan answers./
