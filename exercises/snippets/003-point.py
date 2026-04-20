@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from functools import partial
 from math import hypot
 
-record = partial(dataclass, frozen=True)
+record = partial(dataclass, frozen=True, slots=True)
 
 
 @record

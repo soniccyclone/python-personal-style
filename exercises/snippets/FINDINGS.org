@@ -438,7 +438,15 @@ Sub-question raised: should the =record= alias also set
 =slots=True= (Python 3.10+)? =slots=True= drops =__dict__= on
 instances, cuts memory, makes attribute access faster, and rejects
 typo-assignment to undeclared attributes. It strengthens the CLOS
-slot-spec analogy. Nathan's answer: /TBD/.
+slot-spec analogy.
+
+Nathan's answer: *strict.* =record = partial(dataclass, frozen=True,
+slots=True)=. Records are pure data; the slot spec should be closed.
+=weakref= support is not added by default — if a specific record
+type genuinely needs weak-referenceability, that class overrides the
+alias with =@dataclass(frozen=True, slots=True, weakref_slot=True)=
+explicitly at its declaration site, keeping the default pure and
+making the opt-in visible.
 
 **** Question 2 — Record type: =@dataclass=, =NamedTuple=, or plain class?
 

@@ -44,15 +44,15 @@ arguments. Python translation below.
   aren't right — things Python's runtime looks up through the type
   and that can't be expressed as free functions. Non-dunder
   "methods" and =@property= are free functions.
-- *Records are frozen by default, via a =record= alias.* Don't
-  scatter =@dataclass(frozen=True)= everywhere — define it once in
-  a shared utility module and import:
+- *Records are frozen and slotted by default, via a =record= alias.*
+  Don't scatter =@dataclass(frozen=True, slots=True)= everywhere —
+  define it once in a shared utility module and import:
 
   #+begin_src python
     from dataclasses import dataclass
     from functools import partial
 
-    record = partial(dataclass, frozen=True)
+    record = partial(dataclass, frozen=True, slots=True)
   #+end_src
 
   then at each declaration site:
@@ -63,6 +63,16 @@ arguments. Python translation below.
         x: float
         y: float
   #+end_src
+
+  =slots=True= closes the object layout — what's declared is what
+  exists, typo assignment (=p.xx = 1=) raises, and the per-instance
+  memory footprint drops from ~200 bytes to ~72 for a two-field
+  record. This is the CLOS =defclass= slot-spec semantic in Python.
+  =__weakref__= is /not/ in the default slot list; if a specific
+  record type genuinely needs to be weakly referenceable, that class
+  overrides the alias with =@dataclass(frozen=True, slots=True,
+  weakref_slot=True)= explicitly — opt-in, visible at the
+  declaration site where it matters.
 
 - *Dunders needing unusual semantics go directly on the =@record=
   class body.* Adjust dataclass flags as needed (=eq=False= if you
