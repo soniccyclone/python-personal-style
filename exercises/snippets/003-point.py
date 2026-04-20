@@ -1,8 +1,11 @@
 from dataclasses import dataclass
+from functools import partial
 from math import hypot
 
+record = partial(dataclass, frozen=True)
 
-@dataclass(frozen=True)
+
+@record
 class Point:
     x: float
     y: float

@@ -384,75 +384,175 @@ Four things happened:
 
 **** Question 1 — When /are/ methods tolerated on a record?
 
-Some Python protocols force methods onto the class body. Even a
-pure-data record may need:
-
-- =__post_init__= for field validation in a dataclass.
-- =__iter__= / =__next__= for iteration protocol.
-- =__enter__= / =__exit__= for =with= statement support.
-- =__hash__= / =__eq__= / =__repr__= when the dataclass-generated
-  versions aren't right.
-
-Where's the line?
+Options:
 
 - (a) Allow only dunders that Python's runtime protocols require;
   every non-dunder behavior is a free function.
-- (b) Allow dunders + =__post_init__=-style constructor validation;
-  everything else is a free function.
+- (b) Allow dunders + =__post_init__=-style constructor validation.
 - (c) Allow dunders + a small set of "obviously self-referential"
-  methods (=__repr__= customization, maybe =.as_dict()=); still no
-  domain behavior.
+  methods.
 
-Nathan's answer: /TBD/
-
-**** Question 2 — Record type: =@dataclass=, =NamedTuple=, or plain class?
-
-All three can model "two floats with a name." CLOS doesn't
-distinguish — it just has slot specs.
-
-- (a) =@dataclass(frozen=True)=. Attribute access only. The most
-  Pythonic =defclass= analog.
-- (b) =typing.NamedTuple= subclass. Attribute access *and* tuple
-  semantics (unpack, index). Lower memory. Callers can treat it as
-  a tuple, which is sometimes wanted and sometimes a leak.
-- (c) Plain class with hand-rolled dunders. Most flexibility, most
-  ceremony. Justified only when something the generators don't do
-  is needed.
-
-Nathan's answer: /TBD/
+Nathan's answer: *(a)*. Only dunders forced by the runtime protocol
+(=__iter__=, =__enter__=/=__exit__=, =__post_init__=, customized
+=__hash__= / =__eq__= / =__repr__= when the generator can't produce
+what's needed). Every non-dunder behavior is a free function.
 
 **** Question 3 — =frozen=True= by default?
 
-CLOS slots are mutable by default; immutability is a separate
-choice. In Python, =@dataclass= is also mutable by default, and
-=frozen=True= is an opt-in that also gives you hashability. The
-Hickey / data-orientation leaning argues for immutable-by-default.
+Options:
 
-- (a) Default =frozen=True= for records / value types; reserve
-  mutable dataclasses for things that genuinely own state over
-  time (caches, builders).
-- (b) Default mutable; add =frozen=True= only when needed for
-  hashing or explicit immutability.
+- (a) Default =frozen=True= for records.
+- (b) Default mutable; opt in to =frozen=True= when needed.
 
-Nathan's answer: /TBD/
+Nathan's answer: *(a)*. Records are immutable by default. *And:*
+"we should clean up the dataclass decorator with a frozen version so
+that we aren't slapping that rather verbose decorator all over a
+codebase."
+
+The v3 revision below introduces a =record= alias for
+=dataclass(frozen=True)=:
+
+#+begin_src python
+from dataclasses import dataclass
+from functools import partial
+
+record = partial(dataclass, frozen=True)
+
+
+@record
+class Point:
+    x: float
+    y: float
+#+end_src
+
+=partial(dataclass, frozen=True)= returns a callable that, applied
+to a class, invokes =dataclass(cls, frozen=True)=. The decorator
+form =@record= works directly — no wrapping function needed, no
+=@record()= parens-with-no-args ceremony.
+
+In a real project, =record= would live in a shared utility module
+(something like =_record.py= or =typing_ext.py=) so it's one import
+to every module that needs it.
+
+Sub-question raised: should the =record= alias also set
+=slots=True= (Python 3.10+)? =slots=True= drops =__dict__= on
+instances, cuts memory, makes attribute access faster, and rejects
+typo-assignment to undeclared attributes. It strengthens the CLOS
+slot-spec analogy. Nathan's answer: /TBD/.
+
+**** Question 2 — Record type: =@dataclass=, =NamedTuple=, or plain class?
+
+/Deep dive below per Nathan's request./
+
+***** The three options, by capability
+
+- *=@dataclass=* (or our =@record= alias). The stdlib CLOS-=defclass=
+  analog. Fields declared with annotations; =__init__=, =__eq__=,
+  =__hash__=, =__repr__= generated; =frozen=True= gives immutability
+  and hashability; =slots=True= (3.10+) drops =__dict__=;
+  =__match_args__= generated for pattern matching. Supports
+  defaults, =default_factory=, inheritance (with some field-order
+  rules). Full =__post_init__= hook for validation.
+
+- *=typing.NamedTuple= subclass.*
+
+  #+begin_src python
+    class Point(NamedTuple):
+        x: float
+        y: float
+  #+end_src
+
+  Immutable by construction, hashable, lower memory. Attribute
+  access /and/ tuple semantics: =p.x=, =p[0]=, =a, b = p= all work.
+  Has =_replace()= for "modified copy" without =dataclasses.replace=.
+  Generated =__eq__= and =__hash__= via tuple.
+
+- *Plain class* with hand-rolled =__init__=, =__eq__=, =__hash__=,
+  =__repr__=. Maximum flexibility, maximum ceremony, maximum
+  opportunity to forget a dunder and silently break equality or
+  hashing.
+
+***** The decisive issue: NamedTuple erases domain identity
+
+The critical property of =NamedTuple= — and the reason it's wrong
+under CLOS framing — is that *it is a tuple*. Literally:
+
+#+begin_src python
+>>> class Point(NamedTuple):
+...     x: float
+...     y: float
+>>> Point(0, 0) == (0, 0)
+True
+>>> isinstance(Point(0, 0), tuple)
+True
+>>> p = Point(1, 2)
+>>> p[0], p[1]
+(1.0, 2.0)
+#+end_src
+
+A =NamedTuple='s domain identity is collapsed into its structural
+representation. =Point= isn't a distinct type from the perspective
+of equality or structure — it's "a tuple with named accessors."
+Anywhere a tuple is accepted, a =NamedTuple= sneaks through;
+anywhere a =NamedTuple= is expected, a raw tuple may match.
+
+This is the same category of error that rejected =T | None= in
+snippet 002 — a named domain thing collapsed into a lower-level
+generic thing. CLOS's =defclass= explicitly does /not/ do this;
+=defclass='d slots are not a list. The Python analog that preserves
+domain identity is =@dataclass= (→ =@record=), not =NamedTuple=.
+
+Corollary issues:
+
+- Callers can index: =p[0]= works but has no field-name discipline
+  and rots when fields are reordered.
+- Callers can do positional unpacking: =a, b = p= works for two-field
+  records; the moment someone adds a field, every unpacking site
+  breaks silently or noisily depending on the unpack form.
+- No =__post_init__= — no clean validation hook.
+- Inheritance between NamedTuples is awkward (can't extend fields).
+
+The performance story (~25% less memory, faster construction in
+tight loops) is real but irrelevant to style. If you're in a hot
+path where those savings matter, reach for a specific tool. For
+general "named record" modeling, identity matters more than bytes.
+
+***** When a plain class is right
+
+A hand-rolled class earns its keep only when the dataclass
+generators can't express what the class needs:
+
+- Custom =__hash__= that uses only a subset of fields.
+- A field that's computed from other fields at access time rather
+  than stored.
+- A class whose equality is intentionally by identity, not by
+  fields (rare for records; common for lifecycle objects).
+- A class that /is/ state-plus-behavior over time (file handles,
+  connections, caches) — at which point it isn't a record and this
+  whole section doesn't apply.
+
+Every other case — the overwhelming majority of "I need a named
+thing with typed fields" — belongs on =@record=.
+
+***** Nathan's answer: /TBD/
+
+Recommendation pending confirmation:
+
+- =@record= for records.
+- Plain class only when dunders need unusual semantics the
+  generators can't give you.
+- =NamedTuple= only when tuple semantics are actually wanted
+  (genuinely positional records: CSV rows, matrix coordinates that
+  are meant to be indexable) — a narrow, domain-specific case.
 
 **** Question 4 — Polymorphism mechanism (when we need it)
 
-Not exercised by this snippet, but on the horizon. When a behavior
-has to dispatch over multiple record types:
-
-- (a) =@functools.singledispatch= — Python's stdlib =defgeneric=.
-  Decouples the generic function from the types it dispatches over.
-- (b) A third-party multi-dispatch library (=multipledispatch=,
-  =plum-dispatch=). Closer to CLOS, at the cost of a dependency.
-- (c) =isinstance= branching inside a single function body. Zero
-  ceremony; scales badly; conflates dispatch logic with
-  implementation.
-- (d) Abstract base class with subclass overrides. The OO-Python
-  default; fights the CLOS separation.
-
-Nathan's answer: /TBD, surfaces in the next snippet./
+Deferred to a later snippet that actually exercises dispatch over
+multiple record types. Options catalogued: =@functools.singledispatch=,
+third-party multi-dispatch libs, =isinstance= branching, ABC with
+subclass overrides.
 
 *** Rule
 
-/To be recorded once Nathan answers./
+/Q1 and Q3 canonized. Q2 pending deeper confirmation. Q4 deferred
+to next snippet./
