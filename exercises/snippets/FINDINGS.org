@@ -517,33 +517,54 @@ tight loops) is real but irrelevant to style. If you're in a hot
 path where those savings matter, reach for a specific tool. For
 general "named record" modeling, identity matters more than bytes.
 
-***** When a plain class is right
+***** Plain class isn't in the records picture
 
-A hand-rolled class earns its keep only when the dataclass
-generators can't express what the class needs:
+Nathan: "why even use a plain class for dunders? Can't dunders still
+be put onto our record class type when we truly need them? Why ever
+switch back to plain?"
 
-- Custom =__hash__= that uses only a subset of fields.
-- A field that's computed from other fields at access time rather
-  than stored.
-- A class whose equality is intentionally by identity, not by
-  fields (rare for records; common for lifecycle objects).
-- A class that /is/ state-plus-behavior over time (file handles,
-  connections, caches) — at which point it isn't a record and this
-  whole section doesn't apply.
+Correct — the plain-class escape hatch I'd listed earlier was wrong.
+Walking through the cases I'd flagged:
 
-Every other case — the overwhelming majority of "I need a named
-thing with typed fields" — belongs on =@record=.
+- *Custom =__hash__= over a subset of fields.* Just define it in the
+  =@record= body; dataclass preserves user-defined dunders. If you
+  also customize =__eq__=, pass =eq=False= to the dataclass so its
+  generator doesn't collide. Still a =@record=, still frozen, still
+  gets =__init__= and =__repr__= for free.
+- *"Computed fields" via =@property=.* These don't belong on the
+  record at all. =@property= is a method wearing attribute clothing;
+  per Q1's canonized stance, computed values are free functions.
+- *Identity-based equality.* =@dataclass(frozen=True, eq=False)=
+  inherits =object.__eq__= (identity) and =object.__hash__=
+  (id-based). No plain class needed.
+- *Lifecycle objects with state-and-behavior over time* — file
+  handles, connections, caches. These /aren't records/. They're a
+  different category entirely: mutable, identity-equality, nontrivial
+  =__init__=, field-based =__eq__= / =__repr__= makes no sense.
+  Plain class territory, but outside the records question.
 
-***** Nathan's answer: /TBD/
+*Net:* for records there is no "fall back to plain class." The only
+question is =@record= versus =NamedTuple=, and =NamedTuple= is out
+for the identity-erasure reason above.
 
-Recommendation pending confirmation:
+Plain classes exist for a different category: non-record things
+with lifecycle. That distinction deserves its own rule — not a
+branch of the records question.
 
-- =@record= for records.
-- Plain class only when dunders need unusual semantics the
-  generators can't give you.
-- =NamedTuple= only when tuple semantics are actually wanted
-  (genuinely positional records: CSV rows, matrix coordinates that
-  are meant to be indexable) — a narrow, domain-specific case.
+***** Nathan's answer (Q2): =@record= for records, full stop
+
+- =@record= for any "named thing with typed fields."
+- =NamedTuple= only when tuple semantics are /actually wanted/ —
+  genuinely positional data (CSV rows, matrix coordinates) where
+  indexing and unpacking are part of the intended interface. Narrow
+  and domain-specific.
+- *Plain classes are not an option for records.* Dunders that the
+  runtime protocol forces onto the type go directly on =@record=,
+  with dataclass flags (=eq=False=, =unsafe_hash=True=, etc.)
+  adjusted as needed.
+- Plain classes /are/ the right tool for non-records — lifecycle
+  objects where identity, mutability, and custom =__init__= logic
+  are the point. Separate question, separate rule.
 
 **** Question 4 — Polymorphism mechanism (when we need it)
 
@@ -554,5 +575,23 @@ subclass overrides.
 
 *** Rule
 
-/Q1 and Q3 canonized. Q2 pending deeper confirmation. Q4 deferred
-to next snippet./
+Q1, Q2, and Q3 canonized. Sub-question on =slots=True= still open.
+Q4 (polymorphism mechanism) deferred to the next snippet.
+
+Canonized rules (see [[file:../../README.org][README.org]] /Records & Behavior/):
+
+1. Records are pure data. Fields only; behavior is free functions.
+2. Only runtime-protocol dunders are tolerated on records
+   (=__iter__=, =__enter__= / =__exit__=, =__post_init__=, customized
+   =__hash__= / =__eq__= / =__repr__= when generators can't produce
+   what's needed). Non-dunder methods and =@property= → free functions.
+3. =@record= = =partial(dataclass, frozen=True)= is the canonical
+   record decorator. In a real project it lives in a shared utility
+   module.
+4. Records are frozen by default.
+5. =NamedTuple= is out for records — it IS a tuple and so erases
+   domain identity. Reserve for positional data where tuple
+   semantics are intentional.
+6. Plain classes are not part of the records question. They're for
+   lifecycle objects (state + behavior over time, identity equality,
+   custom =__init__=). Separate category, separate rule.

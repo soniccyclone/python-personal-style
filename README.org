@@ -28,6 +28,61 @@ work-in-progress ledger.
 
 ** Imports
 
+** Records & Behavior
+
+Reference: CLOS ([[https://lispcookbook.github.io/cl-cookbook/clos.html][cl-cookbook/clos.html]]). =defclass= is a pure slot
+specification; behavior lives in =defgeneric= / =defmethod= outside
+the class, dispatching on the types of (potentially multiple)
+arguments. Python translation below.
+
+- *Records are pure data.* Fields only; no methods, no properties.
+  Behavior lives in module-level functions that take the record as
+  an argument.
+- *Only runtime-protocol dunders are tolerated on records.*
+  =__iter__=, =__enter__= / =__exit__=, =__post_init__=, customized
+  =__hash__= / =__eq__= / =__repr__= when the generated versions
+  aren't right — things Python's runtime looks up through the type
+  and that can't be expressed as free functions. Non-dunder
+  "methods" and =@property= are free functions.
+- *Records are frozen by default, via a =record= alias.* Don't
+  scatter =@dataclass(frozen=True)= everywhere — define it once in
+  a shared utility module and import:
+
+  #+begin_src python
+    from dataclasses import dataclass
+    from functools import partial
+
+    record = partial(dataclass, frozen=True)
+  #+end_src
+
+  then at each declaration site:
+
+  #+begin_src python
+    @record
+    class Point:
+        x: float
+        y: float
+  #+end_src
+
+- *Dunders needing unusual semantics go directly on the =@record=
+  class body.* Adjust dataclass flags as needed (=eq=False= if you
+  override =__eq__=, =unsafe_hash=True= if you want a custom
+  =__hash__= to coexist with generated =__eq__=, etc.). There is no
+  "fall back to plain class" for records — if it's a record, it's
+  =@record=.
+- *Don't use =typing.NamedTuple= for records.* A =NamedTuple= /is/ a
+  tuple: =Point(0, 0) == (0, 0)= returns =True=, =p[0]= works,
+  =isinstance(p, tuple)= is =True=. Domain identity collapses into
+  structural representation. Same category of error as =T | None=
+  overloading =None=. Reserve =NamedTuple= for cases where tuple
+  semantics are /intentionally/ part of the interface — genuinely
+  positional data like CSV rows or matrix coordinates.
+- *Plain classes are for non-records.* State-plus-behavior objects
+  with a lifecycle (file handles, connections, caches) — mutable,
+  identity-equality, nontrivial =__init__=, field-based
+  =__eq__= / =__repr__= would be wrong. Those are a separate
+  category from records; the rules above don't constrain them.
+
 ** Types & Annotations
 
 - *Return types tell the whole story.* A function's return annotation
