@@ -1,0 +1,58 @@
+#+TITLE: Exercise Ledger
+#+AUTHOR: Nathan Barlow
+#+OPTIONS: toc:2 num:nil
+#+STARTUP: showall
+
+* Purpose
+
+The human-readable ledger of the nitpick exercise. Tracks what was
+presented, what Nathan pushed back on, and what got canonized as a rule.
+
+Implementation of individual code files is tracked separately via =beads=
+(stealth mode, not committed). The org docs are the durable artifact.
+
+* Stages
+
+Three stages, ordered by increasing surface area:
+
+| Stage          | Purpose                                     | Findings                                   |
+|----------------+---------------------------------------------+--------------------------------------------|
+| [[file:snippets/FINDINGS.org][Snippets]]       | Single-concept fragments                    | [[file:snippets/FINDINGS.org][snippets/FINDINGS.org]]                      |
+| Single-file    | Complete programs in one module + venv      | /pending/                                  |
+| Multi-file     | Package layouts with =src/= + venv          | /pending/                                  |
+
+Each stage has its own =FINDINGS.org= that accumulates rules as we go.
+The overarching [[file:../README.org][README.org]] is compiled from those findings at the end.
+
+* Conventions
+
+- Snippets live directly in [[file:snippets/][snippets/]] as numbered =.py= files.
+- Single- and multi-file programs each live in their own numbered subdirectory
+  with a dedicated virtual environment and =pyproject.toml=.
+- Default Python tooling: =uv= for venv + lockfile management, unless
+  Nathan nominates otherwise.
+- Naming: =NNN-kebab-case-description=.
+
+* Progress
+
+** DONE Scaffold repo
+
+- Replaced =README.md= with =README.org=.
+- Created =exercises/= with per-stage directories.
+- Initialized beads in stealth mode.
+
+** TODO Stage 1: Snippets
+
+/In progress./ See [[file:snippets/FINDINGS.org][snippets/FINDINGS.org]].
+
+** TODO Stage 2: Single-file programs
+
+/Pending./
+
+** TODO Stage 3: Multi-file programs
+
+/Pending./
+
+** TODO Compile final README
+
+/Pending./ Roll all =FINDINGS.org= content into [[file:../README.org][../README.org]].

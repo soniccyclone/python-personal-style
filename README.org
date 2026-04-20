@@ -1,0 +1,53 @@
+#+TITLE: Python Personal Style
+#+AUTHOR: Nathan Barlow
+#+OPTIONS: toc:2 num:nil
+#+STARTUP: showall
+
+* About
+
+A literate-programming style guide for Python, derived by nitpicking.
+
+This README is the *final, compiled* takeaway. It is populated progressively
+as the exercises under [[file:exercises/LEDGER.org][exercises/]] uncover concrete rules.
+
+PEP 8 is the starting point; everything here is either a deviation from, or a
+sharpening of, PEP 8 based on lived preference.
+
+* Status
+
+/Not yet compiled./ See [[file:exercises/LEDGER.org][exercises/LEDGER.org]] for the
+work-in-progress ledger.
+
+* Rules
+
+/To be filled in as the exercise progresses./
+
+** Formatting & Layout
+
+** Naming
+
+** Imports
+
+** Types & Annotations
+
+** Errors & Exceptions
+
+** Control Flow
+
+** Comments & Docstrings
+
+** Packaging (=pyproject.toml=, venvs, tooling)
+
+** Testing
+
+* Method
+
+The rules below were extracted by working through three graduated exercises:
+
+1. *Snippets* — small, single-concept fragments.
+2. *Single-file programs* — complete programs in one module, each with its
+   own virtual environment and =pyproject.toml=.
+3. *Multi-file programs* — full package layouts, each with its own venv.
+
+At each step Nathan nitpicked the output. Findings were recorded in the
+per-category =FINDINGS.org= files, then compiled into the rules above.

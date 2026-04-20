@@ -1,0 +1,45 @@
+#+TITLE: Snippet Findings
+#+AUTHOR: Nathan Barlow
+#+OPTIONS: toc:2 num:nil
+#+STARTUP: showall
+
+* Purpose
+
+Per-snippet log of what was presented, what Nathan pushed back on, and
+the rule (if any) that was canonized from the exchange.
+
+Each entry corresponds to one numbered =NNN-*.py= file in this directory.
+
+* Format
+
+Each snippet gets its own heading with:
+
+- *Presented*: the style choices made in the initial version.
+- *Feedback*: Nathan's corrections, in his own words where feasible.
+- *Rule*: the generalized takeaway, if any, for the final README.
+
+If a snippet produces no rule, note "no rule" and move on.
+
+* Snippets
+
+** TODO 001 — =001-greet.py= — plain function with args and return
+
+*** Presented
+
+Style choices baked into the initial version:
+
+- Module-level docstring.
+- =from typing import Optional= and =Optional[str]= (not PEP 604 =str | None=).
+- Google-style docstring with Args/Returns sections.
+- =is None= sentinel check with reassignment inside the body.
+- f-string for formatting.
+- =if __name__ == "__main__":= demo block at the bottom.
+- Double quotes throughout.
+
+*** Feedback
+
+/Awaiting Nathan's nitpick./
+
+*** Rule
+
+/TBD./
