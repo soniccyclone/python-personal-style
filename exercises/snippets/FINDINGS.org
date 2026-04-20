@@ -659,7 +659,7 @@ Nathan raised two successive concerns:
    separation (composability, serialization, inheritance-free)
    persist regardless of tooling. The tooling cost is mitigatable.
 
-*** Revised (v2) — overloads + descriptive names + Shape alias
+*** Revised (v2) — overloads + descriptive names + Shape alias /(explored, rejected)/
 
 #+begin_src python
 from dataclasses import dataclass
@@ -725,7 +725,74 @@ Four changes from v1, each fixing an ergonomic problem:
    =shape: Circle= auto-registers for =Circle= — same as v1. No
    change in mechanics; just doesn't rely on the =_= throwaway.
 
-*** Usage examples — what Pylance surfaces
+*** Feedback on v2
+
+Nathan: "What is this overload junk you changed shapes to? I liked
+how it was previously I just wanted to see how things were done.
+Having =area_circle= defined like that is gonna lead people to
+using those specific methods instead of the dispatch one."
+
+Two distinct objections, both correct:
+
+1. *Descriptive names create a bypass vector.* =def area_circle(...)=
+   at module scope is an importable name. A downstream consumer can
+   =from shapes import area_circle= and call it directly, skipping
+   the =@singledispatch= machinery entirely. The polymorphism stops
+   being the only way in. With =_= as the name, only the /last/ =_=
+   in the module is accessible at module scope (each =def _=
+   shadows the previous), and the leading underscore is Python's
+   implicit "internal/throwaway" signal. =area(shape)= becomes the
+   only usable entry point.
+2. *Overloads are ceremony for a tooling win we don't value enough
+   to pay for.* The =@overload= block triples the number of
+   touchpoints to add a new shape (overload stub + =.register= +
+   alias extension) and clutters the module with type-stub
+   duplication. The Pylance affordance it buys is real but marginal
+   next to the core discipline we're after.
+
+The earlier exploration wasn't wasted — we now know how far Pylance
+can be pushed, and what it costs — but v2 doesn't canonize.
+
+*** Revised (v3) — back to v1 form
+
+#+begin_src python
+from dataclasses import dataclass
+from functools import partial, singledispatch
+from math import pi
+
+record = partial(dataclass, frozen=True, slots=True)
+
+
+@record
+class Circle:
+    radius: float
+
+
+@record
+class Square:
+    side: float
+
+
+@singledispatch
+def area(shape: object) -> float:
+    raise NotImplementedError(f"area for {type(shape).__name__}")
+
+
+@area.register
+def _(shape: Circle) -> float:
+    return pi * shape.radius ** 2
+
+
+@area.register
+def _(shape: Square) -> float:
+    return shape.side ** 2
+#+end_src
+
+Structurally identical to v1. The exploration clarified that the
+simple form /is/ the canonical form; the apparent ergonomic gains
+of v2 don't outweigh its bypass risk and duplication cost.
+
+*** Usage examples — what Pylance surfaces (v2 exploratory)
 
 (Copy these into a separate =.py= file importing from =004-shapes=
 to see the live behavior. The annotations in comments describe what
@@ -797,34 +864,35 @@ reach. The upside: all three touchpoints are in one file (if you
 co-locate), grep-discoverable by the =area_*= naming, and each one
 is mechanical — no room for subtle bugs.
 
-*** Questions resolved by the v2 pattern
+*** Questions resolved
 
 **** Question 1 — polymorphism mechanism (resolves 003 Q4)
 
-Nathan's answer: *(a) =@functools.singledispatch=* with the v2
-augmentations (=@overload= for Pylance, descriptive names for
-discoverability, optional union alias for downstream typing).
+Nathan's answer: *(a) =@functools.singledispatch=*. Plain form, no
+overload augmentation. The base function typed as =shape: object=.
 Third-party multi-dispatch deferred until a snippet actually needs
-two-argument dispatch; =isinstance= branching out; ABC+methods
-out (contradicts 003 rule on pure records).
+two-argument dispatch; =isinstance= branching out; ABC+methods out
+(contradicts 003 rule on pure records).
 
 **** Question 2 — function naming inside =@register=
 
-Nathan's answer: *(b) descriptive names* (=area_circle=,
-=area_square=, =area_<type>=). =_= throwaway was a wash in
-ergonomics and a net loss in discoverability — grep/symbol-search
-can't find anonymous implementations, and Pylance doesn't surface
-=.registry= in its UI. Descriptive naming trivially fixes both.
+Nathan's answer: *(a) =_= throwaway.* Descriptive names
+(=area_circle=, =area_square=) were considered and rejected —
+they become importable module-level names that let downstream code
+bypass the dispatch by calling the specific implementation directly.
+With =_=, only the last =_= shadowing is reachable at module scope,
+and the leading underscore is Python's implicit "private" signal.
+=area(shape)= is the only usable entry point. The grep
+discoverability we lose is a real cost; it's outweighed by keeping
+the dispatch as the single way in.
 
 **** Question 4 — declared interface for participating records
 
-Nathan's answer (tentative): *(d) Union type alias
-=Shape = Circle | Square=.* Not Protocol (structural marker adds
-no info when there are no methods in common). Not ABC (pulls
-inheritance onto pure records — rejected). No-marker (a) is
-CLOS-faithful but loses the downstream-type-reuse convenience. A
-union alias is cheap, declarative, and gives Pylance closed-universe
-knowledge without imposing anything on the records themselves.
+Nathan's answer: *(a) no marker.* Records stay independent. The
+binding is the set of registered methods on =area=. A union alias
+is /allowed/ downstream if a specific function actually benefits
+from typing parameters as =list[Shape]= — it's a local convenience,
+not part of the dispatch pattern itself. No Protocol, no ABC.
 
 *** Questions still open
 
@@ -859,8 +927,21 @@ Nathan's answer: /TBD/.
 
 *** Rule
 
-/Q1, Q2, Q4 canonized (pending README update). Q3 still open.
-Multi-dispatch deferred./
+Q1, Q2, Q4 canonized (pending README update). Q3 still open.
+Multi-dispatch deferred.
+
+Canonized rules from 004:
+
+1. Polymorphism over records is stdlib =@functools.singledispatch=.
+   No third-party multi-dispatch, no =isinstance= branching, no ABC
+   with methods.
+2. Registered implementations use =_= as the function name, not a
+   descriptive name. This prevents importable bypass paths — the
+   generic function must be the only way to invoke the behavior.
+3. Records participating in a generic function don't need a
+   shared interface marker. No =Shape= alias, no Protocol, no ABC.
+   A local union alias is fine when a downstream function actually
+   benefits from it — it doesn't flow from the dispatch pattern.
 
 *** Question 1 — =@singledispatch= as the polymorphism mechanism (resolves 003 Q4)
 
