@@ -1,5 +1,10 @@
-def find_first(items: list[str], query: str) -> str | None:
-    for item in items:
-        if item == query:
-            return item
-    return None
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class NotFound:
+    query: str
+
+
+def find_first(items: list[str], query: str) -> str | NotFound:
+    return next((x for x in items if x == query), NotFound(query))

@@ -30,9 +30,69 @@ work-in-progress ledger.
 
 ** Types & Annotations
 
+- *Return types tell the whole story.* A function's return annotation
+  describes /what the function produces/, not a riddle the caller has
+  to solve. If the function can fail to produce a value, the failure
+  must be a *named* domain type, not =None= sitting inside a union.
+  See Errors & Exceptions for the =T | NamedFailure= shape.
+
 ** Errors & Exceptions
 
+- *Exceptions are for exceptional conditions, not control flow.*
+  Programmer errors, I/O failures, contract violations, unrecoverable
+  state. "The thing I searched for wasn't there" is /not/
+  exceptional — it's a legitimate, design-time-expected outcome of a
+  search, and the function's type must say so. Go's response (remove
+  exceptions entirely because people abuse them) is also wrong:
+  exceptions are the right tool for actually-exceptional conditions,
+  and throwing them out to discipline misuse throws out the real
+  utility too.
+- *Don't overload =None= as a domain absence sentinel.* =None= is
+  already saturated with language-level meanings (default argument,
+  no-return, "not initialized", cache miss, etc.); adding yet another
+  domain meaning on top repeats C's =NULL= mistake at the Python
+  level.
+- *Return =T | NamedFailure= for expected failure modes.* Keep the
+  happy-path type unwrapped — callers who don't need to branch use
+  the =T= directly — and name the failure branch with a frozen
+  dataclass that carries context:
+
+  #+begin_src python
+    @dataclass(frozen=True)
+    class NotFound:
+        query: str
+
+    def find_first(items: list[str], query: str) -> str | NotFound:
+        return next((x for x in items if x == query), NotFound(query))
+  #+end_src
+
+  Do *not* wrap the happy path too (=Found[T] | NotFound=) — in
+  Python that's ceremony without payoff. The wrapper does nothing
+  at runtime but forces every caller to unwrap on every use.
+  (In Rust / Haskell / OCaml where sum types are compile-time
+  enforced and runtime-efficient, wrapping both sides /is/ the
+  correct shape. Python isn't that language; don't pretend it is.)
+- *=dict.get=-style fallback API* when the caller wants an inline
+  default value — caller supplies the default, no type-level branch
+  at all. Cleaner than either =T | None= or =T | NamedFailure= when
+  the caller's intent is "just give me *something*."
+- *=raise X from None=* when an exception /is/ the right tool and
+  we're translating an implementation-detail exception into a domain
+  one — keeps tracebacks clean.
+
 ** Control Flow
+
+- *Literal default in the signature* when the default is immutable
+  and cheap (e.g. =greeting: str = "Hello"=). Reserve the
+  =x=None= sentinel + reassignment pattern for cases where the
+  default is mutable or has to be computed at call time.
+- *=None= as an input default* is tolerated only when it genuinely
+  means "caller didn't specify and no concrete default fits." When a
+  concrete default exists, use it.
+- *=next(genexp, default)= is the "first match" idiom.* Put the
+  named-failure constructor directly in the default slot:
+  =next((x for x in items if x == query), NotFound(query))= — body
+  is one line, no exception handling, no sentinel.
 
 ** Comments & Docstrings
 
@@ -50,13 +110,6 @@ work-in-progress ledger.
 - *Demo blocks don't belong in source files.* If you need to show
   usage, put it in a test or the REPL — not in
   =if __name__ == "__main__":= at the bottom of the module.
-
-** Control Flow
-
-- *Literal default in the signature* when the default is immutable
-  and cheap (e.g. =greeting: str = "Hello"=). Reserve the
-  =x=None= sentinel + reassignment pattern for cases where the
-  default is mutable or has to be computed at call time.
 
 ** Packaging (=pyproject.toml=, venvs, tooling)
 

@@ -48,7 +48,13 @@ The overarching [[file:../README.org][README.org]] is compiled from those findin
 - [X] 001 =greet= — canonized rules on docstring style (prose, not
   Googley; omit when redundant), literal default in signature, no
   demo block, no module docstring on snippets.
-- [ ] 002 — /pending selection/.
+- [X] 002 =find-first= — canonized =T | NamedFailure= as the shape
+  for expected-absence returns. =str | NotFound= with =NotFound= as
+  a frozen dataclass carrying the query; =next(gen, default)= with
+  the failure constructor in the default slot; no =None= overload,
+  no exception-as-signal, no happy-path wrapper. Revisions v1–v4
+  recorded in FINDINGS.
+- [ ] 003 — /pending selection/.
 
 ** TODO Stage 2: Single-file programs
 

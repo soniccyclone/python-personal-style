@@ -111,11 +111,11 @@ def greet(name: str, greeting: str = "Hello") -> str:
   obvious from the name? Deferred to a snippet where the choice is
   more consequential.
 
-** TODO 002 — =002-find-first.py= — iteration, early return, Optional result
+** DONE 002 — =002-find-first.py= — iteration, sum-type result
 
 File: [[file:002-find-first.py][002-find-first.py]]
 
-Presented version:
+*** Presented (v1)
 
 #+begin_src python
 def find_first(items: list[str], query: str) -> str | None:
@@ -125,54 +125,173 @@ def find_first(items: list[str], query: str) -> str | None:
     return None
 #+end_src
 
-*** Question 1 — Union-with-=None= syntax (deferred from 001)
+*** Feedback on v1
 
-The presented version uses PEP 604 =str | None= for the return type.
-This is shorter, import-free, and is the modern Python 3.10+ idiom.
+Nathan:
 
-Alternatives:
+- =None | str= ordering inverts the meaning to "usually nothing but
+  sometimes str" — misrepresents the function.
+- "Architecting around =Optional= like this is already a code smell
+  because it's utilizing =None= as an overload of an end flag rather
+  than using a proper type that defines that something has ended."
+- "If I am going to bother with type hints in a dynamic language I
+  want EXPLICIT types that tell the whole story and don't leave
+  things up to guesswork like pythonistas (read: googlers) are so
+  willing to do."
+- Prefers =next()= over a generator for this snippet specifically.
 
-- (a) =str | None= (presented — PEP 604, native syntax).
-- (b) =Optional[str]= (=from typing import Optional=).
-- (c) =Union[str, None]= (verbose, no one should pick this).
+Underlying argument: =None= is already saturated with language-level
+meanings (default arg, no-return, uninitialized, cache miss, etc.);
+reusing it as a domain "not found" sentinel layers yet another
+meaning on an already-overloaded symbol — C's =NULL= doing every
+absence-meaning at once.
 
-Nathan's answer: /TBD/
-
-*** Question 2 — Iteration idiom for "first match"
-
-The presented version uses an explicit =for= loop with early return.
-Python offers three common patterns:
+*** Revised (v2) — wrong turn
 
 #+begin_src python
-# (a) Explicit for-loop with early return (presented)
-def find_first(items, query):
-    for item in items:
-        if item == query:
-            return item
-    return None
+class NotFound(Exception):
+    pass
 
-# (b) next() over a generator with a default
-def find_first(items, query):
-    return next((x for x in items if x == query), None)
 
-# (c) Filter + next (less common in Python)
-def find_first(items, query):
-    return next(filter(lambda x: x == query, items), None)
+def find_first(items: list[str], query: str) -> str:
+    try:
+        return next(x for x in items if x == query)
+    except StopIteration:
+        raise NotFound(query) from None
 #+end_src
 
-(a) reads top-to-bottom like prose; easy to extend with logging /
-additional conditions; one statement per intent.
+*** Feedback on v2
 
-(b) is one line, idiomatic Python, lazy (stops at first match), and
-the =None= default is right there — but it's denser and the generator
-expression inside =next(...)= is a known readability cliff for some
-readers.
+Nathan: "This specific example find-first.py is WRONG. Because it is
+overloading python's exception system with an improper
+responsibility: signal flagging. It is not an EXCEPTION to not find
+something you are searching for, that is a legitimate output and
+should be reflected in the type itself, not thrown as an error.
+This sort of mistake of overloading an exception system is exactly
+what leads people to golang's foolishness of removing exception
+systems completely, which is also wrong."
 
-(c) is a Lispy way of saying (b); rarely chosen over (b) in real
-Python code.
+The sharpened principle: exceptions are for *actually exceptional*
+conditions (I/O failure, contract violation, programmer error,
+unrecoverable state). "The thing I searched for wasn't there" is a
+legitimate, design-time-expected outcome of a search. It belongs in
+the *type*, not in a thrown exception. Go's answer (delete exceptions
+entirely because people abuse them) is also wrong; exceptions are
+the right tool for truly exceptional conditions and should be kept
+pure for that purpose.
 
-Nathan's answer: /TBD/
+*** Revised (v3) — also wrong turn
 
-*** Rule
+#+begin_src python
+from dataclasses import dataclass
+from typing import Generic, TypeVar
 
-/To be recorded once Nathan answers./
+T = TypeVar("T")
+
+
+@dataclass(frozen=True)
+class Found(Generic[T]):
+    value: T
+
+
+@dataclass(frozen=True)
+class NotFound:
+    query: str
+
+
+def find_first(items: list[str], query: str) -> Found[str] | NotFound:
+    return next((Found(x) for x in items if x == query), NotFound(query))
+#+end_src
+
+*** Feedback on v3
+
+Nathan: "This syntax APPEARS elegant at first glance but upon deeper
+inspection reveals that we have complicated the CALLER location for
+the sake of FAKE TYPES. Which boils down to the fact that we have
+complicated code path for the sake of documentation. Which is
+extremely incorrect."
+
+Then: "Holy crap dude it's just =str | NotFound= that preserves the
+happy path while also structurally informing the caller for the not
+found path instead of an opaque None type."
+
+The problem with v3 was wrapping the /happy/ path in =Found=. At
+runtime =Found= does nothing — it's a dataclass the interpreter
+ignores. But it forces every caller to unwrap on every use, even
+callers who just want to pass the value through. That's caller
+ceremony bought purely for a type-checker label. This is the
+Python-specific critique: in Rust where sum types compile to
+efficient tagged unions and the compiler enforces exhaustive matching,
+wrapping the happy path pays off. In Python, it doesn't.
+
+*** Revised (v4)
+
+#+begin_src python
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class NotFound:
+    query: str
+
+
+def find_first(items: list[str], query: str) -> str | NotFound:
+    return next((x for x in items if x == query), NotFound(query))
+#+end_src
+
+- Happy path is plain =str=. Caller who just wants the value uses it
+  directly — no =.value= unwrap, no =match= statement, no
+  =isinstance= branch.
+- Failure path is a named domain type =NotFound=, not =None=. Carries
+  the =query= it couldn't find — debuggable, not an opaque flag.
+- Caller who /does/ need to branch checks =isinstance(result,
+  NotFound)= (or the inverse on =str=). Only the branching caller
+  pays; the pass-through caller doesn't.
+- Body is one line: =next(gen, default)= with the domain type as the
+  default. Zero exception handling.
+
+*** Rules canonized from this snippet
+
+1. *Don't use =None= as a domain absence sentinel.* =None= is already
+   saturated with the language's absence meanings; layering a domain
+   "not found" meaning on top repeats C's =NULL= mistake.
+
+2. *Don't use exceptions for expected-absence outcomes.* Exceptions
+   are for actually-exceptional conditions (I/O failure, contract
+   violation, programmer error). "Not found when searching" is a
+   routine outcome, not an exception. Go's answer (delete exceptions
+   entirely) is also wrong — keep the exception channel pure so it
+   retains meaning.
+
+3. *Union with a named absence type keeps the happy path unwrapped.*
+   Return =T | NamedFailure= — not =Found[T] | NotFound=. The
+   happy-path type is used directly by callers who don't need to
+   branch; only branching callers pay the =isinstance= cost.
+   =NamedFailure= should carry context (what was searched for, what
+   condition failed).
+
+4. *In other languages where sum types are compile-time-enforced and
+   runtime-efficient (Rust, Haskell, OCaml), wrapping the happy path
+   too is correct.* In Python, it isn't — the happy-path wrapper
+   earns nothing at runtime and costs caller ergonomics.
+
+5. *=dict.get=-style fallback API* when the caller's intent is
+   genuinely "just give me something" — caller supplies the default,
+   no type-level branch at all.
+
+6. *=next(genexp, default)= is the "first match" idiom.* When
+   combined with a named absence type as the default, the body is
+   one line and there is no exception handling anywhere in the
+   function.
+
+7. *=None= as an input default* is tolerated only when it genuinely
+   means "caller didn't specify and no concrete default fits"
+   (extends rule 4 from snippet 001).
+
+*** Still open
+
+- *Type-hint scope* — still deferred from 001.
+- *Where named absence types live* — =NotFound= is defined in the
+  same file as =find_first=. In a multi-module project, is there a
+  shared catalog of absence types, or does each module define its
+  own? Deferred to multi-file stage.
