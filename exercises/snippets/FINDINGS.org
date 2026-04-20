@@ -603,3 +603,169 @@ Canonized rules (see [[file:../../README.org][README.org]] /Records & Behavior/)
 6. Plain classes are not part of the records question. They're for
    lifecycle objects (state + behavior over time, identity equality,
    custom =__init__=). Separate category, separate rule.
+
+** TODO 004 — =004-shapes.py= — polymorphism via =@singledispatch=
+
+File: [[file:004-shapes.py][004-shapes.py]]
+
+Presented version:
+
+#+begin_src python
+from dataclasses import dataclass
+from functools import partial, singledispatch
+from math import pi
+
+record = partial(dataclass, frozen=True, slots=True)
+
+
+@record
+class Circle:
+    radius: float
+
+
+@record
+class Square:
+    side: float
+
+
+@singledispatch
+def area(shape: object) -> float:
+    raise NotImplementedError(f"area for {type(shape).__name__}")
+
+
+@area.register
+def _(shape: Circle) -> float:
+    return pi * shape.radius ** 2
+
+
+@area.register
+def _(shape: Square) -> float:
+    return shape.side ** 2
+#+end_src
+
+Shape records are pure data (per canonized 003 rules); =area= is a
+free function whose dispatch is driven by the argument type, via
+stdlib =functools.singledispatch=. Closest Python analog to CLOS's
+=defgeneric= / =defmethod=.
+
+*** Question 1 — =@singledispatch= as the polymorphism mechanism (resolves 003 Q4)
+
+Options revisited now that we have a snippet that exercises dispatch:
+
+- (a) *=@functools.singledispatch=* (presented). Stdlib, no extra
+  dependency. Base function is the fallback for unregistered types.
+  Closest to CLOS =defgeneric= in single-arg form. Works cleanly
+  with our =@record= stance — no methods on the records, dispatch
+  lives outside.
+- (b) *Third-party multi-dispatch* (=multipledispatch=,
+  =plum-dispatch=). Closer to full CLOS (dispatches on the types
+  of multiple arguments). Cost: a dependency, sometimes
+  typing/tooling integration quirks, sometimes performance surprises.
+  Relevant when a binary operation has to dispatch on /both/ sides
+  (e.g. =intersect(shape_a, shape_b)=).
+- (c) *=isinstance= branching inside one function body.* Zero
+  ceremony, zero imports, but conflates dispatch logic with
+  implementation and doesn't scale as the shape set grows.
+- (d) *ABC with subclass overrides.* The OO-Python default. Pulls
+  behavior onto the class body — directly contradicts the 003 rule
+  that records are pure data. Out.
+
+Nathan's answer: /TBD/
+
+*** Question 2 — Function naming inside =@register=
+
+The presented version uses =_= for every registered implementation:
+
+#+begin_src python
+@area.register
+def _(shape: Circle) -> float:
+    ...
+#+end_src
+
+Alternatives:
+
+- (a) *=_= throwaway* (presented). The decorator pulls the type
+  from the parameter annotation, the outer name (=area=) is what
+  callers invoke, and the inner function's =__name__= is an
+  implementation detail of the dispatch table. Tracebacks through
+  a registered implementation show =area= as the function, not
+  =_= — the =_= is only visible in tools that read
+  =area.registry=.
+- (b) *Descriptive inner name* like =area_circle=, =area_square=.
+  The individual functions are discoverable by search and
+  independently callable (though you shouldn't call them directly
+  — that bypasses dispatch). Cost: module namespace clutter and a
+  naming-discipline obligation.
+- (c) *=area= re-used* as the inner name (the literal
+  =def area(shape: Circle)= repeating the outer name). Legal but
+  shadows the generic function inside the module; easy to break if
+  definition order shifts.
+
+Nathan's answer: /TBD/
+
+*** Question 3 — Base function behavior on unregistered types
+
+The presented version raises =NotImplementedError= with a message
+naming the unknown type:
+
+#+begin_src python
+@singledispatch
+def area(shape: object) -> float:
+    raise NotImplementedError(f"area for {type(shape).__name__}")
+#+end_src
+
+This is genuinely exceptional (caller passed a type we have no
+method for — programmer error or API misuse), so an exception is
+consistent with the 002 rule that exceptions are for
+actually-exceptional conditions. Alternatives:
+
+- (a) *=NotImplementedError= with a diagnostic message* (presented).
+  Treats unknown type as a programmer error.
+- (b) *=TypeError=* instead. More precise semantically ("you passed
+  the wrong type") but the stdlib's own =NotImplementedError=
+  convention for un-overridden polymorphic stubs leans the other
+  way.
+- (c) *Return a named =NotImplementedFor= sum-type tag* applying
+  the 002 rule ("expected absence is typed, not thrown"). Probably
+  overkill here — dispatch failure isn't an expected outcome; it's
+  a bug. But worth flagging.
+- (d) *Return =NotImplemented=* (the sentinel, not the exception).
+  Python uses this for binary-operator dispatch; callers can then
+  try a fallback. Overkill for single-dispatch record polymorphism.
+
+Nathan's answer: /TBD/
+
+*** Question 4 — Do shapes share a declared interface?
+
+The presented version has no =Shape= type. =Circle= and =Square=
+are independently declared records, related only by being
+registered with =area=. CLOS works the same way — =defgeneric=
+doesn't require a common superclass; any class with an applicable
+method is a participant.
+
+Python alternatives if we /do/ want a surface marker:
+
+- (a) *No marker* (presented). Records are independent; the binding
+  is the set of registered methods on =area=.
+- (b) *=typing.Protocol=* as a structural marker. Tells type
+  checkers "anything with these fields counts," but adding a
+  marker without methods is weird — =Shape= with no members is
+  just =object=.
+- (c) *ABC as a nominal marker.* Makes =Circle= and =Square=
+  subclasses of =Shape=. Pulls inheritance into what should be
+  flat records; reintroduces the method-on-class ergonomics we
+  rejected. Out.
+
+Nathan's answer: /TBD/
+
+*** Still open (beyond this snippet)
+
+- *Multi-dispatch.* =@singledispatch= dispatches on the first
+  argument only. A binary operation like
+  =intersect(shape_a, shape_b)= where the result depends on both
+  types needs either a third-party library or a nested-dispatch
+  idiom. Deferred until a snippet actually needs it.
+
+*** Rule
+
+/To be recorded once Nathan answers./

@@ -62,7 +62,11 @@ The overarching [[file:../README.org][README.org]] is compiled from those findin
   Plain class ruled out of the records question — it's a separate
   category for lifecycle objects. Polymorphism mechanism (Q4)
   deferred to the next snippet.
-- [ ] 004 — will exercise polymorphism so Q4 resolves.
+- [-] 004 =shapes= — polymorphism via =@singledispatch=. Four
+  questions posed: mechanism choice (singledispatch vs multi-dispatch
+  vs isinstance vs ABC), inner-function naming inside =@register=,
+  base-function behavior on unknown types, and whether shapes should
+  share a declared interface.
 
 ** TODO Stage 2: Single-file programs
 
