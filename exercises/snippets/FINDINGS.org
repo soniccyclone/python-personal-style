@@ -110,3 +110,69 @@ def greet(name: str, greeting: str = "Hello") -> str:
   public function signatures by default, or only when the types aren't
   obvious from the name? Deferred to a snippet where the choice is
   more consequential.
+
+** TODO 002 — =002-find-first.py= — iteration, early return, Optional result
+
+File: [[file:002-find-first.py][002-find-first.py]]
+
+Presented version:
+
+#+begin_src python
+def find_first(items: list[str], query: str) -> str | None:
+    for item in items:
+        if item == query:
+            return item
+    return None
+#+end_src
+
+*** Question 1 — Union-with-=None= syntax (deferred from 001)
+
+The presented version uses PEP 604 =str | None= for the return type.
+This is shorter, import-free, and is the modern Python 3.10+ idiom.
+
+Alternatives:
+
+- (a) =str | None= (presented — PEP 604, native syntax).
+- (b) =Optional[str]= (=from typing import Optional=).
+- (c) =Union[str, None]= (verbose, no one should pick this).
+
+Nathan's answer: /TBD/
+
+*** Question 2 — Iteration idiom for "first match"
+
+The presented version uses an explicit =for= loop with early return.
+Python offers three common patterns:
+
+#+begin_src python
+# (a) Explicit for-loop with early return (presented)
+def find_first(items, query):
+    for item in items:
+        if item == query:
+            return item
+    return None
+
+# (b) next() over a generator with a default
+def find_first(items, query):
+    return next((x for x in items if x == query), None)
+
+# (c) Filter + next (less common in Python)
+def find_first(items, query):
+    return next(filter(lambda x: x == query, items), None)
+#+end_src
+
+(a) reads top-to-bottom like prose; easy to extend with logging /
+additional conditions; one statement per intent.
+
+(b) is one line, idiomatic Python, lazy (stops at first match), and
+the =None= default is right there — but it's denser and the generator
+expression inside =next(...)= is a known readability cliff for some
+readers.
+
+(c) is a Lispy way of saying (b); rarely chosen over (b) in real
+Python code.
+
+Nathan's answer: /TBD/
+
+*** Rule
+
+/To be recorded once Nathan answers./
