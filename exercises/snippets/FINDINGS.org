@@ -24,22 +24,77 @@ If a snippet produces no rule, note "no rule" and move on.
 
 ** TODO 001 — =001-greet.py= — plain function with args and return
 
-*** Presented
+File: [[file:001-greet.py][001-greet.py]]
 
-Style choices baked into the initial version:
+This snippet is a four-line function, but three decisions baked into
+it generalize to every future Python file. Asking Nathan to pick.
 
-- Module-level docstring.
-- =from typing import Optional= and =Optional[str]= (not PEP 604 =str | None=).
-- Google-style docstring with Args/Returns sections.
-- =is None= sentinel check with reassignment inside the body.
-- f-string for formatting.
-- =if __name__ == "__main__":= demo block at the bottom.
-- Double quotes throughout.
+*** Question 1 — Docstring style on small functions
 
-*** Feedback
+The current version uses a Google-style sectioned docstring:
 
-/Awaiting Nathan's nitpick./
+#+begin_src python
+def greet(name: str, greeting: Optional[str] = None) -> str:
+    """Return a greeting for the given name.
+
+    Args:
+        name: Person to greet.
+        greeting: Optional custom salutation. Defaults to "Hello".
+
+    Returns:
+        The formatted greeting.
+    """
+#+end_src
+
+Alternatives:
+
+- (a) *Google sections always*, even on tiny functions (current).
+- (b) *One-line docstring* for functions under ~10 lines; sections reserved for nontrivial APIs.
+- (c) *No docstring* unless the function is part of a published API or has non-obvious behavior; rely on naming + types.
+- (d) *NumPy-style* sectioned docstrings instead of Google.
+- (e) *Sphinx =:param:/:returns:=* style.
+
+Nathan's answer: /TBD/
+
+*** Question 2 — Union-with-=None= syntax
+
+The current version uses =from typing import Optional= with =Optional[str]=.
+
+Alternatives:
+
+- (a) =Optional[str]= (current, pre-3.10 idiom, still idiomatic in many codebases).
+- (b) =str | None= (PEP 604, 3.10+, no import needed).
+- (c) =Union[str, None]= (explicit but verbose).
+
+Nathan's answer: /TBD/
+
+*** Question 3 — =None= sentinel vs other default idioms
+
+When a function takes an optional argument that needs a runtime default, there are three common patterns:
+
+#+begin_src python
+# (a) Sentinel + reassign (current)
+def greet(name, greeting=None):
+    if greeting is None:
+        greeting = "Hello"
+    ...
+
+# (b) Literal default in signature
+def greet(name, greeting="Hello"):
+    ...
+
+# (c) Short-circuit collapse (only works if falsy values are equivalent to missing)
+def greet(name, greeting=None):
+    greeting = greeting or "Hello"
+    ...
+#+end_src
+
+(b) is simplest when the default is immutable and cheap.
+(a) is necessary when the default is mutable or expensive to compute.
+(c) conflates =None= with other falsy values (empty string, =0=) — sometimes wrong.
+
+Nathan's answer: /TBD/
 
 *** Rule
 
-/TBD./
+/To be recorded once the three questions above are answered./
