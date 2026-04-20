@@ -36,6 +36,28 @@ work-in-progress ledger.
 
 ** Comments & Docstrings
 
+- *Docstrings are prose, not templates.* No =Args:=, =Returns:=, or
+  =Raises:= section headers (Google / NumPy / Sphinx styles are all
+  rejected). Write one or more direct sentences describing behavior
+  and any non-obvious constraints. Model: Clojure core, e.g.
+  [[https://github.com/clojure/clojure/blob/clojure-1.12.4/src/clj/clojure/core_print.clj#L16][=*print-length*=]].
+- *No docstring on small, self-explanatory functions.* Rely on the
+  name and type hints. Docstrings earn their place on public API
+  surface and on behavior that can't be read off the signature.
+- *No module docstring unless the module exports a coherent public
+  API that needs one.* The filename and directory already tell you
+  what the file is.
+- *Demo blocks don't belong in source files.* If you need to show
+  usage, put it in a test or the REPL — not in
+  =if __name__ == "__main__":= at the bottom of the module.
+
+** Control Flow
+
+- *Literal default in the signature* when the default is immutable
+  and cheap (e.g. =greeting: str = "Hello"=). Reserve the
+  =x=None= sentinel + reassignment pattern for cases where the
+  default is mutable or has to be computed at call time.
+
 ** Packaging (=pyproject.toml=, venvs, tooling)
 
 ** Testing

@@ -22,18 +22,17 @@ If a snippet produces no rule, note "no rule" and move on.
 
 * Snippets
 
-** TODO 001 — =001-greet.py= — plain function with args and return
+** DONE 001 — =001-greet.py= — plain function with args and return
 
 File: [[file:001-greet.py][001-greet.py]]
 
-This snippet is a four-line function, but three decisions baked into
-it generalize to every future Python file. Asking Nathan to pick.
-
-*** Question 1 — Docstring style on small functions
-
-The current version uses a Google-style sectioned docstring:
+*** Presented (v1)
 
 #+begin_src python
+"""Small greeting helper — nitpick fodder for snippet 001."""
+from typing import Optional
+
+
 def greet(name: str, greeting: Optional[str] = None) -> str:
     """Return a greeting for the given name.
 
@@ -44,57 +43,70 @@ def greet(name: str, greeting: Optional[str] = None) -> str:
     Returns:
         The formatted greeting.
     """
-#+end_src
-
-Alternatives:
-
-- (a) *Google sections always*, even on tiny functions (current).
-- (b) *One-line docstring* for functions under ~10 lines; sections reserved for nontrivial APIs.
-- (c) *No docstring* unless the function is part of a published API or has non-obvious behavior; rely on naming + types.
-- (d) *NumPy-style* sectioned docstrings instead of Google.
-- (e) *Sphinx =:param:/:returns:=* style.
-
-Nathan's answer: /TBD/
-
-*** Question 2 — Union-with-=None= syntax
-
-The current version uses =from typing import Optional= with =Optional[str]=.
-
-Alternatives:
-
-- (a) =Optional[str]= (current, pre-3.10 idiom, still idiomatic in many codebases).
-- (b) =str | None= (PEP 604, 3.10+, no import needed).
-- (c) =Union[str, None]= (explicit but verbose).
-
-Nathan's answer: /TBD/
-
-*** Question 3 — =None= sentinel vs other default idioms
-
-When a function takes an optional argument that needs a runtime default, there are three common patterns:
-
-#+begin_src python
-# (a) Sentinel + reassign (current)
-def greet(name, greeting=None):
     if greeting is None:
         greeting = "Hello"
-    ...
+    return f"{greeting}, {name}!"
 
-# (b) Literal default in signature
-def greet(name, greeting="Hello"):
-    ...
 
-# (c) Short-circuit collapse (only works if falsy values are equivalent to missing)
-def greet(name, greeting=None):
-    greeting = greeting or "Hello"
-    ...
+if __name__ == "__main__":
+    print(greet("Nathan"))
+    print(greet("Nathan", greeting="Howdy"))
 #+end_src
 
-(b) is simplest when the default is immutable and cheap.
-(a) is necessary when the default is mutable or expensive to compute.
-(c) conflates =None= with other falsy values (empty string, =0=) — sometimes wrong.
+*** Feedback
 
-Nathan's answer: /TBD/
+Nathan: "So this is all very verbose. Especially the docstring, it's
+very googley. I really like the way clojure has done things:
+[[https://github.com/clojure/clojure/blob/clojure-1.12.4/src/clj/clojure/core_print.clj#L16][clojure/core_print.clj]]"
 
-*** Rule
+Reading the referenced file: public vars get short *prose* docstrings
+that describe behavior, defaults, and edge cases — no =Args:= /
+=Returns:= / =Raises:= templates. Internal helpers
+(=print-sequential=, =print-meta=, =print-object=, etc.) carry *no*
+docstring at all; name + inline code is the documentation. Names of
+well-understood parameters are single-letter (=w=, =o=, =xs=).
+Structure is dense; no ceremony.
 
-/To be recorded once the three questions above are answered./
+*** Revised (v2)
+
+#+begin_src python
+def greet(name: str, greeting: str = "Hello") -> str:
+    return f"{greeting}, {name}!"
+#+end_src
+
+*** Rules canonized from this snippet
+
+1. *Docstrings are prose, not templates.* No =Args:= / =Returns:= /
+   =Raises:= section headers (Google / NumPy / Sphinx styles are out).
+   When a docstring exists, it's one or more complete sentences
+   describing what the thing does and any non-obvious behavior.
+
+2. *No docstring on small, self-explanatory functions.* Rely on name +
+   type hints. Docstrings are for public API surface and for any
+   behavior that can't be read off the signature.
+
+3. *No module docstrings on snippet files.* The filename and context
+   already say what the file is.
+
+4. *Literal default values in the signature* when the default is
+   immutable and cheap (=greeting: str = "Hello"=). Reserve the
+   sentinel-and-reassign pattern (=x=None= then
+   =if x is None: x = ...=) for cases where the default is mutable or
+   has to be computed at call time.
+
+5. *No =if __name__ == "__main__":= demo block on snippets.* A snippet
+   is a thing to read, not a thing to run. Demos belong in tests or a
+   REPL, not wedged into the file.
+
+*** Still open
+
+- *Union-with-=None= syntax* — the PEP 604 =str | None= vs
+  =Optional[str]= question never got to exercise its muscle because
+  the revised snippet has no nullable arg. Deferred to a later snippet.
+- *Type-hint scope* — the revised version keeps full annotations on
+  both args and the return. Clojure's precedent would argue for
+  annotating only where it clarifies (analogous to =^Writer= interop
+  hints on specific args). Still a real question: do we annotate all
+  public function signatures by default, or only when the types aren't
+  obvious from the name? Deferred to a snippet where the choice is
+  more consequential.

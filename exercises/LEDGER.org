@@ -45,6 +45,11 @@ The overarching [[file:../README.org][README.org]] is compiled from those findin
 
 /In progress./ See [[file:snippets/FINDINGS.org][snippets/FINDINGS.org]].
 
+- [X] 001 =greet= — canonized rules on docstring style (prose, not
+  Googley; omit when redundant), literal default in signature, no
+  demo block, no module docstring on snippets.
+- [ ] 002 — /pending selection/.
+
 ** TODO Stage 2: Single-file programs
 
 /Pending./
