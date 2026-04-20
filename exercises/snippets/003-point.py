@@ -7,5 +7,6 @@ class Point:
     x: float
     y: float
 
-    def distance_to(self, other: "Point") -> float:
-        return hypot(self.x - other.x, self.y - other.y)
+
+def distance(a: Point, b: Point) -> float:
+    return hypot(a.x - b.x, a.y - b.y)

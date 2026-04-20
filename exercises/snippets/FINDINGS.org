@@ -296,11 +296,11 @@ def find_first(items: list[str], query: str) -> str | NotFound:
   shared catalog of absence types, or does each module define its
   own? Deferred to multi-file stage.
 
-** TODO 003 — =003-point.py= — dataclass with a method
+** TODO 003 — =003-point.py= — data record with a related function
 
 File: [[file:003-point.py][003-point.py]]
 
-Presented version:
+*** Presented (v1)
 
 #+begin_src python
 from dataclasses import dataclass
@@ -316,83 +316,142 @@ class Point:
         return hypot(self.x - other.x, self.y - other.y)
 #+end_src
 
-*** Question 1 — Record type: =@dataclass=, =NamedTuple=, or plain class?
+*** Re-orientation — CLOS is the reference
 
-Python gives three built-in ways to model a "two floats with a name":
+Nathan: "let's re-orient this question since this is beginning to
+get into the python class/type system. So I consider that common
+lisp is the one who did class systems right with CLOS:
+[[https://lispcookbook.github.io/cl-cookbook/clos.html][CLOS reference]]"
 
-- (a) =@dataclass(frozen=True)= (presented). Immutable, =__eq__= /
-  =__hash__= / =__repr__= generated. Attribute access. Supports
-  methods naturally. No tuple-unpacking ambiguity (=p.x= is always
-  =p.x=, never =p[0]=).
-- (b) =typing.NamedTuple= subclass. Immutable by construction, tuple
-  semantics (unpack, indexable), ~25% less memory than a dataclass,
-  =__eq__= / =__hash__= via tuple. Methods allowed but feel grafted.
-  Callers can treat it as a tuple which is sometimes wanted and
-  sometimes a leak.
-- (c) Plain class with =__init__=, =__eq__=, =__hash__=,
-  =__repr__= hand-rolled. Most flexibility, most ceremony. Only
-  justified when the class does something the generators can't
-  (custom hashing, lazy fields, inheritance games).
+CLOS principles that matter here:
 
-Nathan's answer: /TBD/
+- *Generic functions, not methods-on-classes.* =defgeneric= /
+  =defmethod= define behavior *outside* the class. =defclass= is a
+  pure slot specification.
+- *Multi-argument dispatch.* Methods specialize on the types of
+  multiple arguments, not just the receiver. No privileged =self=.
+- *Data and behavior are separate concerns.* The philosophical
+  load-bearing piece, aligning directly with Hickey / Clojure
+  data-orientation.
 
-*** Question 2 — =frozen=True= by default?
+Python translation (what we can and can't do):
 
-The presented version is =frozen=True=. Frozen dataclasses are
-immutable (attribute assignment raises), hashable by default, and
-safer as dict keys / set members. Mutable dataclasses are what you
-get without =frozen= — =Point(0, 0).x = 1= works, and =__hash__= is
-set to =None= unless you opt in.
+- Records as pure data → frozen dataclass with only fields. Matches
+  =defclass= as a slot spec.
+- Behavior in free functions → =def distance(a, b)= not
+  =p.distance_to(q)=.
+- Single-argument polymorphism → =functools.singledispatch=.
+  Python's stdlib analog to =defgeneric=.
+- Multi-argument polymorphism → not in stdlib; =multipledispatch=
+  and =plum-dispatch= exist as third-party options. Deferred.
+- Some dunders must stay on the class (=__iter__=, =__enter__= /
+  =__exit__=, =__post_init__=, etc.) because Python's protocol
+  lookup goes through the type. These are a forced exception, not
+  an OOP license.
 
-- (a) Default =frozen=True= for all record/value types; reserve mutable
-  dataclasses for things that genuinely own state over time (caches,
-  builders).
-- (b) Default mutable; add =frozen=True= only when needed for hashing
-  or explicit immutability.
-
-Nathan's answer: /TBD/
-
-*** Question 3 — Methods on a data record
-
-The presented version has =distance_to= as a method. The alternative
-is a free function:
+*** Revised (v2)
 
 #+begin_src python
+from dataclasses import dataclass
+from math import hypot
+
+
+@dataclass(frozen=True)
+class Point:
+    x: float
+    y: float
+
+
 def distance(a: Point, b: Point) -> float:
     return hypot(a.x - b.x, a.y - b.y)
 #+end_src
 
-The Hickey / data-orientation position is that data records should be
-passive — just named fields — and behavior lives in free functions
-that can be composed, shadowed, and tested independently. Methods
-conflate "what this thing is" with "what you can do with it," and
-encourage inheritance-driven elaboration that obscures the data.
+Four things happened:
 
-The OO / encapsulation position is that =p.distance_to(q)= reads
-more naturally than =distance(p, q)= and groups related behavior
-with the data.
+1. =distance_to= moved off =Point= and became a free function
+   =distance(a, b)=.
+2. The self-referential forward reference (=other: "Point"=) is
+   gone because =Point= is already defined at the point where
+   =distance= is annotated.
+3. =Point= is now a pure slot specification, matching =defclass='s
+   role.
+4. Dispatch is trivial (two =Point= args); no =singledispatch=
+   needed here. A later snippet that exercises actual polymorphism
+   (e.g. =area(shape)= over multiple shape types) will surface the
+   =@singledispatch= question.
 
-- (a) Methods on records are fine for natural "self-referential"
-  behavior (=distance_to=, =translate=, =magnitude=).
-- (b) Records are passive; all behavior lives in free functions.
-- (c) Records carry only behavior that's inseparable from the type
-  (e.g. a custom =__repr__=); everything else is a free function.
+*** Questions remaining (CLOS doesn't directly answer these)
+
+**** Question 1 — When /are/ methods tolerated on a record?
+
+Some Python protocols force methods onto the class body. Even a
+pure-data record may need:
+
+- =__post_init__= for field validation in a dataclass.
+- =__iter__= / =__next__= for iteration protocol.
+- =__enter__= / =__exit__= for =with= statement support.
+- =__hash__= / =__eq__= / =__repr__= when the dataclass-generated
+  versions aren't right.
+
+Where's the line?
+
+- (a) Allow only dunders that Python's runtime protocols require;
+  every non-dunder behavior is a free function.
+- (b) Allow dunders + =__post_init__=-style constructor validation;
+  everything else is a free function.
+- (c) Allow dunders + a small set of "obviously self-referential"
+  methods (=__repr__= customization, maybe =.as_dict()=); still no
+  domain behavior.
 
 Nathan's answer: /TBD/
 
-*** Question 4 — Forward reference style
+**** Question 2 — Record type: =@dataclass=, =NamedTuple=, or plain class?
 
-=def distance_to(self, other: "Point")= uses a string literal for
-the self-referential annotation because =Point= isn't yet defined
-when the method signature is parsed. The alternatives:
+All three can model "two floats with a name." CLOS doesn't
+distinguish — it just has slot specs.
 
-- (a) Quoted string (presented): =other: "Point"=.
-- (b) =from __future__ import annotations= at the top of the module,
-  then all annotations are strings at runtime and =other: Point= just
-  works.
-- (c) Python 3.12+ =Self= from =typing=: =other: Self=.
+- (a) =@dataclass(frozen=True)=. Attribute access only. The most
+  Pythonic =defclass= analog.
+- (b) =typing.NamedTuple= subclass. Attribute access *and* tuple
+  semantics (unpack, index). Lower memory. Callers can treat it as
+  a tuple, which is sometimes wanted and sometimes a leak.
+- (c) Plain class with hand-rolled dunders. Most flexibility, most
+  ceremony. Justified only when something the generators don't do
+  is needed.
 
 Nathan's answer: /TBD/
+
+**** Question 3 — =frozen=True= by default?
+
+CLOS slots are mutable by default; immutability is a separate
+choice. In Python, =@dataclass= is also mutable by default, and
+=frozen=True= is an opt-in that also gives you hashability. The
+Hickey / data-orientation leaning argues for immutable-by-default.
+
+- (a) Default =frozen=True= for records / value types; reserve
+  mutable dataclasses for things that genuinely own state over
+  time (caches, builders).
+- (b) Default mutable; add =frozen=True= only when needed for
+  hashing or explicit immutability.
+
+Nathan's answer: /TBD/
+
+**** Question 4 — Polymorphism mechanism (when we need it)
+
+Not exercised by this snippet, but on the horizon. When a behavior
+has to dispatch over multiple record types:
+
+- (a) =@functools.singledispatch= — Python's stdlib =defgeneric=.
+  Decouples the generic function from the types it dispatches over.
+- (b) A third-party multi-dispatch library (=multipledispatch=,
+  =plum-dispatch=). Closer to CLOS, at the cost of a dependency.
+- (c) =isinstance= branching inside a single function body. Zero
+  ceremony; scales badly; conflates dispatch logic with
+  implementation.
+- (d) Abstract base class with subclass overrides. The OO-Python
+  default; fights the CLOS separation.
+
+Nathan's answer: /TBD, surfaces in the next snippet./
 
 *** Rule
 
