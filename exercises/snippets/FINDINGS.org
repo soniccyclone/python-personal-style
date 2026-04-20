@@ -608,7 +608,7 @@ Canonized rules (see [[file:../../README.org][README.org]] /Records & Behavior/)
 
 File: [[file:004-shapes.py][004-shapes.py]]
 
-Presented version:
+*** Presented (v1)
 
 #+begin_src python
 from dataclasses import dataclass
@@ -643,10 +643,224 @@ def _(shape: Square) -> float:
     return shape.side ** 2
 #+end_src
 
-Shape records are pure data (per canonized 003 rules); =area= is a
-free function whose dispatch is driven by the argument type, via
-stdlib =functools.singledispatch=. Closest Python analog to CLOS's
-=defgeneric= / =defmethod=.
+*** Discussion — CLOS alignment vs Python tooling
+
+Nathan raised two successive concerns:
+
+1. *Discoverability of registered dispatches.* In SBCL + SLIME,
+   generic functions are a language-level primitive with first-class
+   tooling support — the IDE can list applicable methods, navigate
+   the dispatch table, and complete based on argument types.
+   =@singledispatch= is a library retrofit; the registry is
+   introspectable at runtime but most IDEs show only the base
+   function's signature at call sites.
+2. *Should we abandon CLOS alignment and put methods on records?*
+   Resolved: *no.* The architectural benefits of data/behavior
+   separation (composability, serialization, inheritance-free)
+   persist regardless of tooling. The tooling cost is mitigatable.
+
+*** Revised (v2) — overloads + descriptive names + Shape alias
+
+#+begin_src python
+from dataclasses import dataclass
+from functools import partial, singledispatch
+from math import pi
+from typing import overload
+
+record = partial(dataclass, frozen=True, slots=True)
+
+
+@record
+class Circle:
+    radius: float
+
+
+@record
+class Square:
+    side: float
+
+
+Shape = Circle | Square
+
+
+@overload
+def area(shape: Circle) -> float: ...
+@overload
+def area(shape: Square) -> float: ...
+
+
+@singledispatch
+def area(shape: Shape) -> float:
+    raise NotImplementedError(f"area for {type(shape).__name__}")
+
+
+@area.register
+def area_circle(shape: Circle) -> float:
+    return pi * shape.radius ** 2
+
+
+@area.register
+def area_square(shape: Square) -> float:
+    return shape.side ** 2
+#+end_src
+
+Four changes from v1, each fixing an ergonomic problem:
+
+1. *=@overload= declarations.* Pylance reads these to resolve
+   =area(some_circle)= to the Circle overload's signature,
+   narrow the return type, and flag non-shape arguments at the
+   call site. Runtime dispatch is still the =@singledispatch=
+   machinery; overloads are pure type-hints.
+2. *=Shape = Circle | Square= alias.* Centralizes the "which types
+   participate" list. Other functions can type parameters as
+   =list[Shape]=, =shape: Shape= without re-enumerating. The
+   =@singledispatch= base function now takes =shape: Shape= instead
+   of =shape: object=, giving Pylance a closed-universe type to
+   reason about.
+3. *Descriptive names in =@register=.* =area_circle= /
+   =area_square= instead of =_=. Grep, "find symbol," and
+   "go to definition" all work without knowing about
+   =.registry=. Tracebacks show the actual implementation name.
+4. *Register decorators use the annotation.* =@area.register= with
+   =shape: Circle= auto-registers for =Circle= — same as v1. No
+   change in mechanics; just doesn't rely on the =_= throwaway.
+
+*** Usage examples — what Pylance surfaces
+
+(Copy these into a separate =.py= file importing from =004-shapes=
+to see the live behavior. The annotations in comments describe what
+Pylance reports in VS Code.)
+
+**** Type inference at call sites
+
+#+begin_src python
+c = Circle(radius=1.0)
+s = Square(side=2.0)
+
+a1 = area(c)   # Pylance: a1: float  (matches Circle overload)
+a2 = area(s)   # Pylance: a2: float  (matches Square overload)
+
+total = a1 + a2  # Pylance: total: float
+#+end_src
+
+**** Error detection on non-shape arguments
+
+#+begin_src python
+from pathlib import Path
+
+p = Path("example")
+a = area(p)
+# Pylance error:
+#   Argument of type "Path" cannot be assigned to parameter
+#   "shape" of type "Circle" or "Square" in any overload.
+#   Overloads:
+#     (shape: Circle) -> float
+#     (shape: Square) -> float
+#+end_src
+
+**** Using =Shape= in downstream signatures
+
+#+begin_src python
+def total_area(shapes: list[Shape]) -> float:
+    return sum(area(s) for s in shapes)
+
+# At the call site:
+total_area([Circle(1.0), Square(2.0)])   # OK
+total_area([Circle(1.0), Path("x")])      # Pylance: list[Circle | Path]
+                                          # not assignable to list[Shape]
+#+end_src
+
+**** Adding a new shape (the maintenance burden)
+
+#+begin_src python
+@record
+class Triangle:
+    base: float
+    height: float
+
+
+Shape = Circle | Square | Triangle   # (1) extend the alias
+
+
+@overload
+def area(shape: Triangle) -> float: ...   # (2) add the overload
+
+
+@area.register
+def area_triangle(shape: Triangle) -> float:   # (3) register the impl
+    return 0.5 * shape.base * shape.height
+#+end_src
+
+Three touchpoints per new shape. Pylance cannot auto-derive (1) or
+(2) from (3) — that's the 20% of CLOS/SLIME ergonomics Python can't
+reach. The upside: all three touchpoints are in one file (if you
+co-locate), grep-discoverable by the =area_*= naming, and each one
+is mechanical — no room for subtle bugs.
+
+*** Questions resolved by the v2 pattern
+
+**** Question 1 — polymorphism mechanism (resolves 003 Q4)
+
+Nathan's answer: *(a) =@functools.singledispatch=* with the v2
+augmentations (=@overload= for Pylance, descriptive names for
+discoverability, optional union alias for downstream typing).
+Third-party multi-dispatch deferred until a snippet actually needs
+two-argument dispatch; =isinstance= branching out; ABC+methods
+out (contradicts 003 rule on pure records).
+
+**** Question 2 — function naming inside =@register=
+
+Nathan's answer: *(b) descriptive names* (=area_circle=,
+=area_square=, =area_<type>=). =_= throwaway was a wash in
+ergonomics and a net loss in discoverability — grep/symbol-search
+can't find anonymous implementations, and Pylance doesn't surface
+=.registry= in its UI. Descriptive naming trivially fixes both.
+
+**** Question 4 — declared interface for participating records
+
+Nathan's answer (tentative): *(d) Union type alias
+=Shape = Circle | Square=.* Not Protocol (structural marker adds
+no info when there are no methods in common). Not ABC (pulls
+inheritance onto pure records — rejected). No-marker (a) is
+CLOS-faithful but loses the downstream-type-reuse convenience. A
+union alias is cheap, declarative, and gives Pylance closed-universe
+knowledge without imposing anything on the records themselves.
+
+*** Questions still open
+
+**** Question 3 — base function behavior on unregistered types
+
+The v2 snippet still raises =NotImplementedError=. Options and my
+view:
+
+- (a) *=NotImplementedError= with a diagnostic message* (presented).
+  Treats unknown type as a programmer error. Stdlib convention.
+  With the =Shape= union and =@overload= declarations, Pylance
+  prevents most of these at compile time anyway — this is a runtime
+  backstop for cases the type checker didn't see (e.g. =Any=-typed
+  values crossing the boundary, dynamically constructed instances).
+- (b) *=TypeError=* — more precise semantically.
+- (c) *Return a =NotImplementedFor= sum-type tag* (applying 002
+  discipline). Overkill for a code path that only fires on
+  programmer error.
+- (d) *Return the =NotImplemented= sentinel.* Used by Python's
+  binary-operator dispatch. Not a natural fit for
+  single-dispatch record polymorphism.
+
+Nathan's answer: /TBD/.
+
+*** Still deferred (beyond this snippet)
+
+- *Multi-dispatch.* =@singledispatch= dispatches on the first
+  argument only. A binary operation like
+  =intersect(shape_a, shape_b)= where the result depends on both
+  types needs either a third-party library or a nested-dispatch
+  idiom. Deferred until a snippet actually needs it.
+
+*** Rule
+
+/Q1, Q2, Q4 canonized (pending README update). Q3 still open.
+Multi-dispatch deferred./
 
 *** Question 1 — =@singledispatch= as the polymorphism mechanism (resolves 003 Q4)
 
