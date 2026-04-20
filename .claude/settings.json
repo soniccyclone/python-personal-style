@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bd init *)",
+      "Bash(bd setup *)",
+      "Bash(bd create *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(bd close *)",
+      "Bash(bd reopen *)"
+    ]
+  }
+}
