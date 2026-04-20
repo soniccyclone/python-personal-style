@@ -8,7 +8,14 @@
       "Bash(git commit -m *)",
       "Bash(git add * && git commit -m *)",
       "Bash(bd close *)",
-      "Bash(bd reopen *)"
+      "Bash(bd reopen *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git add * && git commit *)",
+      "Bash(tail *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(tail *)"
     ]
   }
 }
