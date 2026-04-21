@@ -1,5 +1,6 @@
 import sys
 import json
+import inspect
 import argparse
 import functools
 
@@ -59,15 +60,24 @@ def parse(source: TextIO) -> Iterator[tuple[int, User | ParseError]]:
 
 
 def logged(fn):
+    sig = inspect.signature(fn)
+
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
-        log.debug('enter', function=fn.__name__)
+        bound = dict(sig.bind(*args, **kwargs).arguments)
+        log.debug('enter', function=fn.__name__, args=bound)
         try:
             result = fn(*args, **kwargs)
-            log.debug('exit', function=fn.__name__)
+            log.debug('exit', function=fn.__name__, result=result)
             return result
-        except Exception:
-            log.exception('error', function=fn.__name__)
+        except Exception as exc:
+            log.error(
+                'error',
+                function=fn.__name__,
+                args=bound,
+                exc_type=type(exc).__name__,
+                exc_message=str(exc),
+            )
             raise
     return wrapper
 

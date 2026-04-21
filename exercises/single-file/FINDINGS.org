@@ -133,23 +133,80 @@ same output shape.
 
 **** Invisible logging via =@logged= decorator
 
-The =logged= decorator wraps a function to log entry / exit / error
-uniformly:
+Nathan's v2 pushback: "logged still seems useless, shouldn't we
+also include information from the function itself? Like what argv
+main had? And shouldn't we also print the exception we captured in
+logged or is it sufficient to let a stacktrace handle that further
+up since we re-raise?"
+
+Both land. The v1 decorator only logged =function=fn.__name__= —
+no args, no exception details. Functionally a no-op for diagnostic
+value.
+
+v2:
 
 #+begin_src python
 def logged(fn):
+    sig = inspect.signature(fn)
+
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
-        log.debug('enter', function=fn.__name__)
+        bound = dict(sig.bind(*args, **kwargs).arguments)
+        log.debug('enter', function=fn.__name__, args=bound)
         try:
             result = fn(*args, **kwargs)
-            log.debug('exit', function=fn.__name__)
+            log.debug('exit', function=fn.__name__, result=result)
             return result
-        except Exception:
-            log.exception('error', function=fn.__name__)
+        except Exception as exc:
+            log.error(
+                'error',
+                function=fn.__name__,
+                args=bound,
+                exc_type=type(exc).__name__,
+                exc_message=str(exc),
+            )
             raise
     return wrapper
 #+end_src
+
+Three changes:
+
+1. *=inspect.signature= captures the function's parameter names
+   once per decoration.* =sig.bind(*args, **kwargs).arguments=
+   converts the positional/keyword call into a dict of
+   =param_name -> value=. The log then carries =args={'argv':
+   ['users.txt']}= — the actual named arguments the function was
+   invoked with, not a nameless tuple.
+2. *=result= is included in the exit log* so the diagnostic trail
+   shows what the function returned. For entry-point functions
+   returning small values (exit codes, dataclass records), that's
+   valuable context. (Caveat: for functions that return huge or
+   sensitive values, the decorator as-is leaks them into logs.
+   Address when a real program has sensitive returns — not a
+   concern for 001.)
+3. *The error branch logs =exc_type= and =exc_message= as
+   structured fields*, using =log.error= (not =log.exception=).
+   Reason: we don't have =structlog.processors.format_exc_info= in
+   the processor chain, so =log.exception= wouldn't add traceback
+   info to the JSON output anyway. Making the type and message
+   explicit fields means log aggregators can filter on
+   =exc_type='FileNotFoundError'= without regex-scraping the
+   =event= string.
+
+   On Nathan's question about the stacktrace: re-raising lets
+   Python's default excepthook print the full traceback on
+   unhandled propagation out of the CLI — one copy, human-readable.
+   Including =format_exc_info= in the processor chain would have
+   produced a second copy in the structured JSON, which is
+   redundant for a CLI. For a long-running service (FastAPI,
+   etc.) that catches its own exceptions, we'll add
+   =format_exc_info= to the processors and the structured
+   traceback becomes primary. The decision to exclude it here is
+   specific to the CLI context.
+
+=bound= is referenced in both the enter log and the error log, so
+a log aggregator can correlate "enter with these args" with
+"failed with this exception" across the two events.
 
 Applied to =main=. Internal helpers (=_collect=, =parse_args=,
 =emit_json=, =_report_errors=) don't need their own; the decorator
@@ -160,10 +217,7 @@ Domain-event logging (=log.error('file_not_found', ...)=,
 caught exceptions, they're specific events the function decided to
 emit. The decorator handles the generic three (start / end /
 catch); the inline calls handle the specific events the function
-body knows about. Nathan's rule allows this: "logging should be
-done right at the beginning, end, or on a catch of some error" —
-decorator covers the first three; domain events are the fourth,
-known-at-the-callsite kind.
+body knows about.
 
 **** Build backend — =uv_build=, not =hatchling=
 
