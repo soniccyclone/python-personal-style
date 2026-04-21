@@ -13,18 +13,18 @@ import structlog
 
 
 record = partial(dataclass, frozen=True, slots=True)
-
-
-structlog.configure(
-    processors=[
-        structlog.stdlib.add_log_level,
-        structlog.processors.TimeStamper(fmt='iso'),
-        structlog.processors.JSONRenderer(),
-    ],
-    logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
-)
-
 log = structlog.get_logger()
+
+
+def configure_logging() -> None:
+    structlog.configure(
+        processors=[
+            structlog.stdlib.add_log_level,
+            structlog.processors.TimeStamper(fmt='iso'),
+            structlog.processors.JSONRenderer(),
+        ],
+        logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
+    )
 
 
 @record
@@ -114,7 +114,7 @@ def _report_errors(errors: list[tuple[int, ParseError]]) -> None:
 
 
 @logged
-def main(argv: list[str] | None = None) -> int:
+def _run(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
     if not args.path.exists():
@@ -126,3 +126,8 @@ def main(argv: list[str] | None = None) -> int:
     _report_errors(errors)
 
     return 1 if errors else 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    configure_logging()
+    return _run(argv)

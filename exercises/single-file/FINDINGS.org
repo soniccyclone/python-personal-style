@@ -127,9 +127,13 @@ structured key-value message: =log.warning('parse_error',
 lineno=lineno, line=err.line, reason=err.reason)= instead of
 =log.error('line %d: ...', ...)=. Machine-parseable by default.
 
-The configuration happens once at module import time (structlog's
-idiomatic pattern) so every caller — including tests — sees the
-same output shape.
+The configuration lives in =configure_logging()= and is called from
+=main()= before any logging fires. Not at module import time —
+Nathan: "I DESPISE that sort of code that runs on import, I hate
+most code that runs on import as it's usually heavily side
+effect-y and is also overloading the module import system's single
+responsibility (to import library code, not run it)." Module import
+stays pure; side effects are deferred until the entry point runs.
 
 **** Invisible logging via =@logged= decorator
 
@@ -208,8 +212,36 @@ Three changes:
 a log aggregator can correlate "enter with these args" with
 "failed with this exception" across the two events.
 
-Applied to =main=. Internal helpers (=_collect=, =parse_args=,
-=emit_json=, =_report_errors=) don't need their own; the decorator
+Applied to =_run=, not =main=. Reason: the decorator's wrapper
+runs /before/ the decorated function's body. If =@logged= were on
+=main= and =main= called =configure_logging()= as its first
+statement, the 'enter' log would fire before the logger was
+configured — it would use structlog's default renderer, then
+subsequent logs would use JSON, and the output would be
+inconsistent.
+
+Split =main= into two functions:
+
+#+begin_src python
+@logged
+def _run(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    # ... actual work
+    return exit_code
+
+
+def main(argv: list[str] | None = None) -> int:
+    configure_logging()
+    return _run(argv)
+#+end_src
+
+=main= is a thin environmental-setup shim. =_run= carries the
+actual body and the =@logged= decorator. By the time =_run= is
+called, logging is configured — so the entry/exit/error logs all
+flow through the JSON renderer as intended.
+
+Internal helpers (=_collect=, =parse_args=, =emit_json=,
+=_report_errors=) don't need their own =@logged=; the decorator
 pattern scales when we have more entry points.
 
 Domain-event logging (=log.error('file_not_found', ...)=,
@@ -271,20 +303,30 @@ These generalize beyond 001 and belong in the README eventually:
 7. *=ruff= is the sole linter and formatter.* Warsaw config
    applied. No black / isort / flake8 stack.
 
+*** Rules to canonize from the v2 refactor (updated)
+
+Adding one more rule that emerged from the logging-config pushback:
+
+8. *No code runs at module import time.* Module import is for
+   importing library code, not executing it. Configuration,
+   logging setup, side-effect-y initialization — all of these live
+   in functions that are called explicitly from an entry point
+   (=main=). The module-level body is for =import= statements,
+   type aliases, constants (cheap, pure), and =def=/=class=
+   statements. Any stateful or side-effectful operation — even
+   idiomatic ones like =logging.basicConfig= or
+   =structlog.configure= — belongs inside a function and is
+   deferred to entry-point invocation.
+
 *** Still open
 
-- *Structured logging config location.* Module-import-time
-  configuration is clean for a CLI but has side effects on import.
-  For a library module this would be wrong (can't force config on
-  a caller). Does 002+ need a different pattern — e.g. "configure
-  at CLI entry, library modules stay neutral"?
 - *Path vs stdin.* The CLI currently takes a path. Stream-based
-  parsing makes stdin support trivial. Worth adding? =argparse.FileType=
-  is the idiomatic way but has quirks.
-- *Exit code taxonomy.* 0/1/2 is common Unix; would a richer scheme
-  (2 = misuse, 65 = data format per sysexits.h, etc.) pay its way?
-  Probably not for a small CLI; pay attention when we hit real
-  app territory.
+  parsing makes stdin support trivial. Worth adding?
+  =argparse.FileType= is the idiomatic way but has quirks.
+- *Exit code taxonomy.* 0/1/2 is common Unix; would a richer
+  scheme (2 = misuse, 65 = data format per sysexits.h, etc.) pay
+  its way? Probably not for a small CLI; pay attention when we
+  hit real app territory.
 
 Directory: [[file:001-parse-users/][001-parse-users/]]
 
