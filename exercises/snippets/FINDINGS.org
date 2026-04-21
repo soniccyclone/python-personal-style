@@ -1229,3 +1229,128 @@ groups. Rationale is visual uniformity per group.
    from-imports sort alphabetically.
 5. *Two blank lines between the import block and module-level
    code.*
+
+** DONE 006 — =006-parse-user.py= — Warsaw defaults consolidation
+
+File: [[file:006-parse-user.py][006-parse-user.py]]
+
+Nathan: "How much can we just default to warsaw on?" — as much as
+possible where Warsaw doesn't conflict with the Clojure/CLOS
+references. This snippet applies every Warsaw rule that fills a gap
+our style hasn't already filled.
+
+Presented version:
+
+#+begin_src python
+import logging
+
+from dataclasses import dataclass
+from functools import partial
+
+
+record = partial(dataclass, frozen=True, slots=True)
+log = logging.getLogger(__name__)
+
+
+@record
+class User:
+    name: str
+    email: str
+
+
+def parse_user(line: str) -> User:
+    """Parse a 'name,email' line into a User."""
+    # Bail early on malformed input rather than half-parse.
+    parts = line.strip().split(',', 1)
+    if len(parts) != 2:
+        raise ValueError(f'malformed user line: {line!r}')
+
+    name, email = parts
+    _require_email(email)
+    return User(name=name.strip(), email=email.strip())
+
+
+def _require_email(email: str) -> None:
+    if '@' not in email.strip():
+        raise ValueError(f'not an email: {email!r}')
+#+end_src
+
+*** Warsaw rules exercised here
+
+1. *Imports* — already canonized from 005 (non-from first, from
+   after a blank line, length-sorted within non-from).
+2. *Single quotes for short strings.* Every string literal uses
+   =' '= (error messages, f-string body, separator). Warsaw's
+   typing-efficiency rationale; ruff can enforce with
+   =quote-style = 'single'=.
+3. *Triple-double quotes for docstrings.* =""Parse a...""= with
+   closing =""""= on the same line for one-liners. PEP 257 shape.
+4. *Line length 100.* Every line comfortably within; no
+   violations. Warsaw's evolved compromise between 79 (too short
+   for modern monitors) and unbounded (loses scannability).
+5. *Blank lines* — two between top-level constructs (after
+   imports, between =record=/=log= module state and =User=,
+   between =User= and =parse_user=, between =parse_user= and
+   =_require_email=). One blank line inside =parse_user= to
+   separate the validation stanza from the construction stanza —
+   deliberate, with a preceding comment orienting the reader.
+6. *Preceding comment, complete sentence, explains /why/.*
+   "Bail early on malformed input rather than half-parse." Capital
+   letter, full stop, describes the reasoning (not the syntax).
+7. *Narrow exception handling* — each =raise ValueError= is at the
+   exact site that detected the problem. No blanket =try=/=except=
+   around the whole function. The error messages include the
+   offending input via =!r= for debuggability.
+8. *Single leading underscore for non-public.* =_require_email= is
+   a validation helper; not part of the module's public surface.
+   Callers reach =parse_user=; they don't touch =_require_email=.
+9. *Narrow emptiness / comparison.* =len(parts) != 2= instead of
+   =if parts[0] and parts[1]= or similar — the condition says what
+   it means.
+
+*** Rules Warsaw covers that we're defaulting to
+
+Summarized for the README canonization pass. These are adopted
+wholesale because they fill Python-specific gaps and don't conflict
+with Clojure/CLOS:
+
+- Line length 100.
+- Single quotes for short strings; double quotes only when single
+  quotes would require escaping inside the string. Docstrings use
+  triple-double.
+- Two blank lines between top-level constructs; one between class
+  methods; none between class and its first method or between any
+  class/method and its docstring.
+- Minimize vertical whitespace inside functions. Use preceding
+  comments to separate stanzas rather than blank lines alone.
+- Preceding comments preferred over trailing / right-hanging.
+  Comments are complete sentences with capital letters and periods.
+  Comment /why/, not /what/.
+- Narrow =try= blocks (only the raising lines); narrow =except=
+  clauses (named exceptions, avoid blanket =except Exception=
+  unless genuinely intended).
+- Single leading underscore =_name= for non-public attributes /
+  helpers. Double leading underscore =__name= only for
+  inheritance-safe truly-private. Warsaw calls
+  "double-leading-no-trailing" a "failed experiment"; we concur.
+- Narrow emptiness / comparison: =if len(seq) == 0= over =if not seq=
+  when the distinction matters. "Narrowest comparison that makes
+  sense."
+
+*** Already rejected
+
+Warsaw's "docstrings on all modules/functions/classes/methods" —
+conflicts with our Clojure-derived "no docstring on small
+self-explanatory functions" (canonized in 001). Lisp-family wins.
+
+*** Deferred
+
+- *=@public= decorator from =atpublic= as alternative to
+  =__all__=.* Surfaces when we have a real module boundary worth
+  exporting — single-file or multi-file stage.
+
+*** Rule
+
+All Warsaw defaults above are canonized into README.org sections
+(Formatting & Layout, Naming, Errors & Exceptions, Comments &
+Docstrings).

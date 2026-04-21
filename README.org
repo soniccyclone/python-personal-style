@@ -43,7 +43,43 @@ references above follows PEP 8.
 
 ** Formatting & Layout
 
+Reference: Barry Warsaw's [[https://barry.warsaw.us/software/STYLEGUIDE.txt][STYLEGUIDE.txt]].
+
+- *Line length is 100.* Warsaw's evolved compromise between PEP 8's
+  79 (too short for modern displays, cramps expressions) and
+  unbounded (loses scannability). Ruff: =line-length = 100=.
+- *Single quotes for short strings* (=foo = 'bar'=). Double quotes
+  only when single quotes would require escaping inside the string
+  (=warn = "don't do that"=). *Triple-double quotes for docstrings*
+  and multi-line strings. Ruff supports
+  =quote-style = 'single'=. Warsaw's rationale is typing ergonomics;
+  the rule applies regardless.
+- *Two blank lines between top-level constructs* (functions, classes,
+  module-level blocks after imports). *One blank line between class
+  methods.* *No blank lines* between a class and its first method,
+  or between any class/method and its docstring.
+- *Minimize vertical whitespace inside functions.* If you're reaching
+  for a blank line to separate stanzas, write a preceding comment
+  that explains the next stanza's purpose — the comment is the
+  separator.
+
 ** Naming
+
+Reference: Barry Warsaw's [[https://barry.warsaw.us/software/STYLEGUIDE.txt][STYLEGUIDE.txt]].
+
+- *Single leading underscore for non-public* — module-level helpers
+  (=_require_email=), non-public attributes on a class, anything not
+  part of the public surface. The underscore is Python's convention
+  for "not for external callers."
+- *Double leading underscore =__name= only for inheritance-safe
+  truly-private attributes* — name-mangled by the interpreter to
+  avoid subclass clashes. Rare; reach for it only when you're
+  writing a class explicitly designed for inheritance and a
+  subclass clash would be a real bug. Warsaw calls
+  "double-leading-no-trailing" a "failed experiment"; concur.
+- *Dunders* (=__init__=, =__iter__=, etc.) are the Python runtime's
+  protocol surface — those aren't in the "private" category, they're
+  a different kind of thing.
 
 ** Imports
 
@@ -268,6 +304,21 @@ arguments. Python translation below.
 - *=raise X from None=* when an exception /is/ the right tool and
   we're translating an implementation-detail exception into a domain
   one — keeps tracebacks clean.
+- *Narrow =try= blocks.* Only the raising line(s) go inside =try=;
+  setup code that can't fail stays outside. Makes the exception's
+  origin unambiguous and prevents the handler from catching failures
+  it didn't intend to.
+- *Narrow =except= clauses.* Named exceptions specifically
+  (=except ValueError=, =except FileNotFoundError=). Avoid blanket
+  =except Exception= or bare =except:=. The one exception: a bare
+  =except:= paired with a re-raise (=except: cleanup(); raise=) for
+  exception-safe teardown when any failure at all must trigger
+  cleanup.
+- *Narrow comparison for emptiness.* Prefer =if len(seq) == 0= over
+  =if not seq= when the distinction matters — the latter is also
+  true for =None=, =0=, empty string, etc. Warsaw's rule: "narrowest
+  comparison that makes sense." =if seq= is fine when /any/ falsy
+  value is genuinely equivalent to "nothing to do."
 
 ** Control Flow
 
@@ -299,6 +350,28 @@ arguments. Python translation below.
 - *Demo blocks don't belong in source files.* If you need to show
   usage, put it in a test or the REPL — not in
   =if __name__ == "__main__":= at the bottom of the module.
+- *Preceding comments over trailing right-hanging comments.*
+
+  #+begin_src python
+    # Frobbing the bar first lowers it.
+    foo = blarzigop(bar)
+  #+end_src
+
+  not
+
+  #+begin_src python
+    foo = frob(bar)  # Frobbing the bar first lowers it.
+  #+end_src
+
+  Right-hanging comments crowd the code, break column alignment,
+  and get truncated in narrow terminals or diffs.
+- *Comments are complete sentences* with capitalization and terminal
+  periods. They're prose, not telegraphese.
+- *Comment /why/, not /what/.* The code already says /what/.
+  Comments earn their keep explaining reasoning — constraints that
+  aren't visible, alternatives considered and rejected, non-obvious
+  consequences. "Be kind to your future self": one day you'll read
+  this code and wonder why it's this way and not some other way.
 
 ** Packaging (=pyproject.toml=, venvs, tooling)
 

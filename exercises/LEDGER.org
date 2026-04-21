@@ -81,7 +81,15 @@ The overarching [[file:../README.org][README.org]] is compiled from those findin
   and alphabetical within from-imports. Wildcard imports, relative
   vs absolute, =__all__= / =@public=, and =TYPE_CHECKING= guards
   all noted as deferred for later stages.
-- [ ] 006 — /pending selection/.
+- [X] 006 =parse-user= — Warsaw defaults consolidation snippet.
+  Applies line length 100, single quotes (triple-double for
+  docstrings), two-blank-lines-between-top-level, single-underscore
+  for non-public, narrow =try=/=except=, narrow emptiness
+  comparisons, preceding comments with why-not-what in complete
+  sentences. All canonized into README.org under Formatting &
+  Layout, Naming, Errors & Exceptions, and Comments & Docstrings.
+  =@public= from =atpublic= deferred to the multi-file stage.
+- [ ] 007 — testing (the last untouched README section).
 
 ** TODO Stage 2: Single-file programs
 
