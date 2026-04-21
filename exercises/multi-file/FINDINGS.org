@@ -41,6 +41,11 @@ Warsaw formatting, structlog, the =record= alias) — extended with:
 
 Directory: [[file:001-bookmarks/][001-bookmarks/]]
 
+*Status:* v1 scaffolded at commit =ee2729a=. Nathan to review the
+scaffold and answer the three open questions in /Questions for
+Nathan/ below before anything canonizes into README.org. Nothing
+from this program is in the style guide yet.
+
 A minimal bookmarks / TIL (today-I-learned) service. Persist short
 notes with tags. API: create, list (optionally filtered by tag),
 get one, delete one. SQLite backend. Pydantic for HTTP schemas;
