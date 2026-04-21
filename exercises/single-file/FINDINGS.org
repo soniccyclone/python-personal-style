@@ -42,6 +42,196 @@ surface.
 
 ** TODO 001 — =parse-users= — CLI user-record validator
 
+/In progress — v1 pushed back heavily by Nathan; v2 refactored
+below./
+
+*** Feedback on v1
+
+Nathan's pushback, verbatim highlights:
+
+1. "The very way file reading is done is deeply coupling the system
+   to reading only file paths, that's obviously wrong to anyone who
+   knows Clean Code. It ought to be reading a stream and that
+   function parses the input. Then the caller is capable of
+   passing a file stream in and the unit test just needs to create
+   it's own stream. It doesn't need a temp file path. Temp file
+   paths for anything other than integration tests reveal that
+   you've overloaded your concerns and are not decoupled enough."
+2. "There is only one test type here because only one test file,
+   unit and integration tests need to live in separate files."
+3. "Main is a mess: arg parsing should be done in its own function
+   since its always long enough to warrant it, logging should
+   always be structured logs and also should be generally invisible
+   (e.g. use decorators for logging rather than writing it inside
+   functions since well scoped functions can always have their
+   logging done right at the beginning, end, or on a catch of some
+   error)."
+4. "On build, I have no clue why you chose hatchling when uv_build
+   is built in, why did you do that?"
+5. "Ruff is good as the linter we'll always use especially if we
+   are going to mostly follow Warsaw's linting style and ignore
+   black."
+
+Each of these lands.
+
+*** v2 refactor
+
+**** Stream-based parsing
+
+=parse_file(path)= is gone. The module now exposes:
+
+- =parse_user(line: str) -> User | ParseError= — single line, pure.
+- =parse(source: TextIO) -> Iterator[tuple[int, User | ParseError]]=
+  — consumes a stream, yields indexed results. Generator. Doesn't
+  touch the filesystem.
+
+The CLI (=main=) opens the file with =args.path.open()= and passes
+the open stream. Unit tests pass =io.StringIO(...)= — no =tmp_path=,
+no filesystem, no coupling of parsing to I/O. File-opening is a
+CLI-layer concern.
+
+**** Unit vs integration tests split by directory
+
+#+begin_example
+tests/
+├── unit/
+│   └── test_parsing.py    # parse_user + parse(StringIO), hypothesis, parametrize
+└── integration/
+    └── test_cli.py        # main() with tmp_path + capsys
+#+end_example
+
+Unit tests are pure functions over in-memory streams. Integration
+tests exercise =main()= end-to-end through a real =tmp_path= file
+and capture stdout/stderr. =pytest= discovers both via
+=testpaths = ['tests']= without extra config.
+
+**** Main decomposed
+
+Before, =main= was a 25-line method doing arg parsing + logging
+setup + file existence check + parsing + JSON output + error
+reporting + exit code mapping in one body. After:
+
+- =parse_args(argv)= owns argparse setup and returns the
+  Namespace.
+- =emit_json(payload)= owns stdout serialization.
+- =_collect(path)= consumes the stream into =(users, errors)=.
+- =_report_errors(errors)= logs each parse failure.
+- =main= is now ~8 lines of orchestration: parse args, check file
+  exists, collect, emit, report, return exit code.
+
+**** Structured logging via =structlog=
+
+=logging.basicConfig=-with-plain-text is replaced by =structlog=
+configured to render JSON to stderr. Every log event is a
+structured key-value message: =log.warning('parse_error',
+lineno=lineno, line=err.line, reason=err.reason)= instead of
+=log.error('line %d: ...', ...)=. Machine-parseable by default.
+
+The configuration happens once at module import time (structlog's
+idiomatic pattern) so every caller — including tests — sees the
+same output shape.
+
+**** Invisible logging via =@logged= decorator
+
+The =logged= decorator wraps a function to log entry / exit / error
+uniformly:
+
+#+begin_src python
+def logged(fn):
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        log.debug('enter', function=fn.__name__)
+        try:
+            result = fn(*args, **kwargs)
+            log.debug('exit', function=fn.__name__)
+            return result
+        except Exception:
+            log.exception('error', function=fn.__name__)
+            raise
+    return wrapper
+#+end_src
+
+Applied to =main=. Internal helpers (=_collect=, =parse_args=,
+=emit_json=, =_report_errors=) don't need their own; the decorator
+pattern scales when we have more entry points.
+
+Domain-event logging (=log.error('file_not_found', ...)=,
+=log.warning('parse_error', ...)=) stays inline — those aren't
+caught exceptions, they're specific events the function decided to
+emit. The decorator handles the generic three (start / end /
+catch); the inline calls handle the specific events the function
+body knows about. Nathan's rule allows this: "logging should be
+done right at the beginning, end, or on a catch of some error" —
+decorator covers the first three; domain events are the fourth,
+known-at-the-callsite kind.
+
+**** Build backend — =uv_build=, not =hatchling=
+
+=uv_build= is uv's built-in PEP 517 backend, shipped with uv since
+late 2024. Since we've already committed to =uv= as the tooling,
+using =uv_build= means one less moving part in the build system —
+no separate =hatchling= or =setuptools= dependency, no second
+config vocabulary to learn.
+
+=pyproject.toml= now declares =build-system.requires =
+['uv_build>=0.5.15,<0.6.0']=, =build-backend = 'uv_build'=. Module
+auto-detection from =src/= works the same way.
+
+**** =ruff= is the sole linter and formatter
+
+Confirmed. Warsaw's ruff config (=isort= length-sort-straight,
+format=single-quote, line-length=100) stays in =pyproject.toml=.
+No =black=, no separate =isort=, no =flake8=.
+
+*** Rules to canonize from the v2 refactor
+
+These generalize beyond 001 and belong in the README eventually:
+
+1. *I/O and parsing are separated concerns.* Parsing functions
+   take streams (=TextIO=, iterables of lines, or similar), not
+   paths. The CLI / entry-point layer opens files and passes
+   streams in. Unit tests exercise parsing with =io.StringIO=; no
+   =tmp_path= unless you're explicitly integration-testing the
+   file layer.
+2. *Unit and integration tests live in separate directories.*
+   =tests/unit/= and =tests/integration/=. Unit tests are pure;
+   integration tests touch the filesystem, network, subprocess,
+   or real external systems. =tmp_path= usage is the tell — if a
+   test reaches for it, it belongs in integration.
+3. *Arg parsing is a standalone function.* =def parse_args(argv)=,
+   separate from =main=. Rationale: argparse setup is always long
+   enough to warrant its own scope, and testing CLI-argument
+   validation independently of program execution is a real need.
+4. *Logging is structured.* =structlog= with JSON renderer to
+   stderr. Events are key-value messages: =log.warning('event_name',
+   field1=v1, field2=v2)=. Never printf-style formatting for log
+   messages.
+5. *Logging is invisible via decorators.* A =@logged= decorator
+   handles entry / exit / error on the entry-point function(s).
+   Inline logging is reserved for specific domain events the
+   function body needs to emit (=log.error('file_not_found',
+   ...)=); everything else rides on the decorator.
+6. *=uv_build= is the build backend when using =uv=.* Don't reach
+   for hatchling or flit unless you have a specific reason. One
+   tool for venv + dep + build = fewer moving parts.
+7. *=ruff= is the sole linter and formatter.* Warsaw config
+   applied. No black / isort / flake8 stack.
+
+*** Still open
+
+- *Structured logging config location.* Module-import-time
+  configuration is clean for a CLI but has side effects on import.
+  For a library module this would be wrong (can't force config on
+  a caller). Does 002+ need a different pattern — e.g. "configure
+  at CLI entry, library modules stay neutral"?
+- *Path vs stdin.* The CLI currently takes a path. Stream-based
+  parsing makes stdin support trivial. Worth adding? =argparse.FileType=
+  is the idiomatic way but has quirks.
+- *Exit code taxonomy.* 0/1/2 is common Unix; would a richer scheme
+  (2 = misuse, 65 = data format per sysexits.h, etc.) pay its way?
+  Probably not for a small CLI; pay attention when we hit real
+  app territory.
+
 Directory: [[file:001-parse-users/][001-parse-users/]]
 
 Extends snippet 006's =parse_user= into a complete CLI: reads a

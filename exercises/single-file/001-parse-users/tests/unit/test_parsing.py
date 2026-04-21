@@ -1,9 +1,9 @@
-import json
+import io
 
 import pytest
 from hypothesis import given, strategies as st
 
-from parse_users import User, ParseError, parse_user, parse_file, main
+from parse_users import User, ParseError, parse_user, parse
 
 
 # Fragments valid inside a user line: non-empty after stripping, no commas,
@@ -90,10 +90,9 @@ def test_parse_user_rejects_malformed(line, reason):
     assert actual.reason == reason
 
 
-def test_parse_file_interleaves_users_and_errors(tmp_path):
+def test_parse_interleaves_users_and_errors_from_a_stream():
     # Arrange
-    source = tmp_path / 'users.txt'
-    source.write_text(
+    source = io.StringIO(
         'alice,alice@example.com\n'
         'bad-line\n'
         'bob,bob@example.com\n'
@@ -108,54 +107,19 @@ def test_parse_file_interleaves_users_and_errors(tmp_path):
     ]
 
     # Act
-    actual = parse_file(source)
+    actual = list(parse(source))
 
     # Assert
     assert actual == expected
 
 
-def test_main_emits_json_for_valid_users(tmp_path, capsys):
+def test_parse_skips_blank_lines_without_erroring():
     # Arrange
-    source = tmp_path / 'users.txt'
-    source.write_text('alice,alice@example.com\nbob,bob@example.com\n')
+    source = io.StringIO('\n\n\nalice,alice@example.com\n\n')
+    expected = [(4, User(name='alice', email='alice@example.com'))]
 
     # Act
-    exit_code = main([str(source)])
+    actual = list(parse(source))
 
     # Assert
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert json.loads(captured.out) == {
-        'users': [
-            {'name': 'alice', 'email': 'alice@example.com'},
-            {'name': 'bob', 'email': 'bob@example.com'},
-        ]
-    }
-
-
-def test_main_returns_1_when_any_record_fails(tmp_path, capsys):
-    # Arrange
-    source = tmp_path / 'users.txt'
-    source.write_text('alice,alice@example.com\nbad-line\n')
-
-    # Act
-    exit_code = main([str(source)])
-
-    # Assert
-    captured = capsys.readouterr()
-    assert exit_code == 1
-    assert json.loads(captured.out) == {
-        'users': [{'name': 'alice', 'email': 'alice@example.com'}]
-    }
-    assert 'bad-line' in captured.err
-
-
-def test_main_returns_2_when_file_missing(tmp_path, capsys):
-    # Arrange
-    missing = tmp_path / 'nope.txt'
-
-    # Act
-    exit_code = main([str(missing)])
-
-    # Assert
-    assert exit_code == 2
+    assert actual == expected

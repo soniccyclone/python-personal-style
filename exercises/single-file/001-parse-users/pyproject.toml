@@ -1,13 +1,15 @@
 [build-system]
-requires = ['hatchling']
-build-backend = 'hatchling.build'
+requires = ['uv_build>=0.5.15,<0.6.0']
+build-backend = 'uv_build'
 
 [project]
 name = 'parse-users'
 version = '0.1.0'
 description = 'Validate a file of name,email records and emit JSON.'
 requires-python = '>=3.14'
-dependencies = []
+dependencies = [
+    'structlog>=24.0',
+]
 
 [project.scripts]
 parse-users = 'parse_users:main'
@@ -18,9 +20,6 @@ dev = [
     'hypothesis>=6.100',
     'ruff>=0.8',
 ]
-
-[tool.hatch.build.targets.wheel]
-sources = ['src']
 
 [tool.ruff]
 line-length = 100

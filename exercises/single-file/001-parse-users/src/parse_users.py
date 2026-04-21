@@ -1,15 +1,29 @@
 import sys
 import json
-import logging
 import argparse
+import functools
 
 from dataclasses import dataclass, asdict
 from functools import partial
 from pathlib import Path
+from typing import Iterator, TextIO
+
+import structlog
 
 
 record = partial(dataclass, frozen=True, slots=True)
-log = logging.getLogger('parse_users')
+
+
+structlog.configure(
+    processors=[
+        structlog.stdlib.add_log_level,
+        structlog.processors.TimeStamper(fmt='iso'),
+        structlog.processors.JSONRenderer(),
+    ],
+    logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
+)
+
+log = structlog.get_logger()
 
 
 @record
@@ -36,39 +50,69 @@ def parse_user(line: str) -> User | ParseError:
     return User(name=name.strip(), email=email.strip())
 
 
-def parse_file(path: Path) -> list[tuple[int, User | ParseError]]:
-    entries: list[tuple[int, User | ParseError]] = []
-    for lineno, raw in enumerate(path.read_text().splitlines(), start=1):
-        # Skip blank lines silently — they're not errors, they're padding.
+def parse(source: TextIO) -> Iterator[tuple[int, User | ParseError]]:
+    for lineno, raw in enumerate(source, start=1):
+        # Skip blank lines silently — they're padding, not records.
         if not raw.strip():
             continue
-        entries.append((lineno, parse_user(raw)))
-    return entries
+        yield (lineno, parse_user(raw.rstrip('\n')))
 
 
-def main(argv: list[str] | None = None) -> int:
+def logged(fn):
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        log.debug('enter', function=fn.__name__)
+        try:
+            result = fn(*args, **kwargs)
+            log.debug('exit', function=fn.__name__)
+            return result
+        except Exception:
+            log.exception('error', function=fn.__name__)
+            raise
+    return wrapper
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog='parse-users',
         description='Validate a file of name,email records and emit JSON.',
     )
     parser.add_argument('path', type=Path, help='Path to the user file.')
-    args = parser.parse_args(argv)
+    return parser.parse_args(argv)
 
-    logging.basicConfig(level=logging.INFO, format='%(message)s', stream=sys.stderr)
 
-    if not args.path.exists():
-        log.error('file not found: %s', args.path)
-        return 2
-
-    entries = parse_file(args.path)
-    users = [entry for _, entry in entries if isinstance(entry, User)]
-    errors = [(lineno, entry) for lineno, entry in entries if isinstance(entry, ParseError)]
-
-    # JSON to stdout; errors to stderr. Keeps the happy-path output pipeable.
-    json.dump({'users': [asdict(u) for u in users]}, sys.stdout, indent=2)
+def emit_json(payload: dict) -> None:
+    json.dump(payload, sys.stdout, indent=2)
     sys.stdout.write('\n')
 
+
+def _collect(path: Path) -> tuple[list[User], list[tuple[int, ParseError]]]:
+    users: list[User] = []
+    errors: list[tuple[int, ParseError]] = []
+    with path.open() as source:
+        for lineno, entry in parse(source):
+            if isinstance(entry, User):
+                users.append(entry)
+            else:
+                errors.append((lineno, entry))
+    return users, errors
+
+
+def _report_errors(errors: list[tuple[int, ParseError]]) -> None:
     for lineno, err in errors:
-        log.error('line %d: %s: %r', lineno, err.reason, err.line)
+        log.warning('parse_error', lineno=lineno, line=err.line, reason=err.reason)
+
+
+@logged
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+
+    if not args.path.exists():
+        log.error('file_not_found', path=str(args.path))
+        return 2
+
+    users, errors = _collect(args.path)
+    emit_json({'users': [asdict(u) for u in users]})
+    _report_errors(errors)
 
     return 1 if errors else 0
