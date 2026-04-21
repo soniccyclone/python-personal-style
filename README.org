@@ -377,6 +377,64 @@ arguments. Python translation below.
 
 ** Testing
 
+Meta-philosophy, from Nathan's global preferences:
+
+- *Integration tests > unit tests for most applications.* Unit tests
+  are fragile and test implementation details; integration tests
+  catch real bugs and survive refactoring.
+- *Exception: pure functions with complex logic* — those deserve
+  unit tests.
+- *Test behavior, not implementation.*
+
+Mechanics:
+
+- *=pytest= is the framework.* Stdlib =unittest= is out — too
+  verbose, too much ceremony.
+- *Test function names follow =test_<function>_<behavior>=*
+  (e.g. =test_parse_user_splits_name_and_email=). Reads as prose:
+  "test that parse_user splits name and email."
+- *Exception assertions use =pytest.raises(X, match=...)=*.
+  Assert the exception type AND a pattern match against the
+  message in one call. Bare =raises= only when the message
+  genuinely doesn't matter.
+- *=@pytest.mark.parametrize= for equivalence-class / exhaustive
+  negative testing.* One function body, many inputs, each reported
+  independently by pytest.
+- *AAA structure with explicit stage comments.* Every test body
+  has =# Arrange=, =# Act=, =# Assert= section comments separated
+  by blank lines. The SUT is visible in the Act line as the
+  function being called; the output variable is =actual= (xUnit
+  convention). For exception tests, Act and Assert collapse into
+  =# Act & Assert= around the =pytest.raises= block:
+
+  #+begin_src python
+    def test_parse_user_splits_name_and_email():
+        # Arrange
+        line = 'alice,alice@example.com'
+        expected = User(name='alice', email='alice@example.com')
+
+        # Act
+        actual = parse_user(line)
+
+        # Assert
+        assert actual == expected
+  #+end_src
+
+  This is deliberate verbosity — tests are documentation of
+  behavior; the three-part structure helps future readers see the
+  shape instantly. A departure from the terseness we canonize
+  elsewhere; accepted for tests specifically.
+- *Tests live in a top-level =tests/= directory* that mirrors the
+  source layout. No Go-style =_test.go= sibling files.
+- *Fixture style is hybrid.* Autouse fixtures for infrastructure
+  concerns shared across most tests (network-boundary fakes,
+  database fakes, time freezing, logging capture) — live in
+  =conftest.py= at the appropriate scope. Function-scoped
+  decorator fixtures for the less prevalent, test-specific ones,
+  requested as function parameters where needed. The rule: if
+  skipping it would break most tests in the scope, autouse; if
+  it's a per-test choice, explicit.
+
 * Method
 
 The rules below were extracted by working through three graduated exercises:

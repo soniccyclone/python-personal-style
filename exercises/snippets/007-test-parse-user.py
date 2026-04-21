@@ -1,28 +1,52 @@
-import pytest
+# pyright: reportUndefinedVariable=false, reportMissingImports=false
+# User and parse_user would be imported from a sibling module in a
+# real project; snippet files with hyphenated names aren't importable.
+# pytest isn't installed in the snippets directory — the snippet
+# exercises layout, not executable test runs.
 
-# In a real project this imports from a sibling module; snippet
-# files with hyphenated names aren't importable, so treat User and
-# parse_user as if they were pulled from 006.
+import pytest
 
 
 def test_parse_user_splits_name_and_email():
-    user = parse_user('alice,alice@example.com')
-    assert user == User(name='alice', email='alice@example.com')
+    # Arrange
+    line = 'alice,alice@example.com'
+    expected = User(name='alice', email='alice@example.com')
+
+    # Act
+    actual = parse_user(line)
+
+    # Assert
+    assert actual == expected
 
 
 def test_parse_user_strips_surrounding_whitespace():
-    user = parse_user('  alice  ,  alice@example.com  ')
-    assert user == User(name='alice', email='alice@example.com')
+    # Arrange
+    line = '  alice  ,  alice@example.com  '
+    expected = User(name='alice', email='alice@example.com')
+
+    # Act
+    actual = parse_user(line)
+
+    # Assert
+    assert actual == expected
 
 
 def test_parse_user_rejects_missing_comma():
+    # Arrange
+    line = 'just-a-name'
+
+    # Act & Assert
     with pytest.raises(ValueError, match='malformed user line'):
-        parse_user('just-a-name')
+        parse_user(line)
 
 
 def test_parse_user_rejects_non_email():
+    # Arrange
+    line = 'alice,not-an-email'
+
+    # Act & Assert
     with pytest.raises(ValueError, match='not an email'):
-        parse_user('alice,not-an-email')
+        parse_user(line)
 
 
 @pytest.mark.parametrize('line', [
@@ -33,5 +57,6 @@ def test_parse_user_rejects_non_email():
     'alice,no-at-sign',
 ])
 def test_parse_user_rejects_malformed(line):
+    # Act & Assert
     with pytest.raises(ValueError):
         parse_user(line)
