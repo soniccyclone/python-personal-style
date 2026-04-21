@@ -1354,3 +1354,144 @@ self-explanatory functions" (canonized in 001). Lisp-family wins.
 All Warsaw defaults above are canonized into README.org sections
 (Formatting & Layout, Naming, Errors & Exceptions, Comments &
 Docstrings).
+
+** TODO 007 — =007-test-parse-user.py= — testing style (pytest)
+
+File: [[file:007-test-parse-user.py][007-test-parse-user.py]]
+
+Meta-philosophy is already fixed by Nathan's global CLAUDE.md:
+
+- *Integration tests > unit tests for most applications.* Unit tests
+  are fragile and test implementation details. Integration tests
+  catch real bugs and survive refactoring.
+- *Exception: pure functions with complex logic* — those deserve
+  unit tests.
+- *Test behavior, not implementation.*
+
+This snippet demonstrates the unit-test form (since =parse_user= is a
+pure function with branching logic — the canonical "exception"
+case). Integration-test demonstration waits for the single-file or
+multi-file stage where a real system boundary exists to integrate
+across.
+
+Presented version:
+
+#+begin_src python
+import pytest
+
+# In a real project this imports from a sibling module; snippet
+# files with hyphenated names aren't importable, so treat User and
+# parse_user as if they were pulled from 006.
+
+
+def test_parse_user_splits_name_and_email():
+    user = parse_user('alice,alice@example.com')
+    assert user == User(name='alice', email='alice@example.com')
+
+
+def test_parse_user_strips_surrounding_whitespace():
+    user = parse_user('  alice  ,  alice@example.com  ')
+    assert user == User(name='alice', email='alice@example.com')
+
+
+def test_parse_user_rejects_missing_comma():
+    with pytest.raises(ValueError, match='malformed user line'):
+        parse_user('just-a-name')
+
+
+def test_parse_user_rejects_non_email():
+    with pytest.raises(ValueError, match='not an email'):
+        parse_user('alice,not-an-email')
+
+
+@pytest.mark.parametrize('line', [
+    '',
+    'alice',
+    'alice,',
+    ',alice@example.com',
+    'alice,no-at-sign',
+])
+def test_parse_user_rejects_malformed(line):
+    with pytest.raises(ValueError):
+        parse_user(line)
+#+end_src
+
+*** Question 1 — =pytest= or =unittest=?
+
+- (a) *=pytest=* (presented). Third-party, community default,
+  terse assertion syntax (=assert x == y=), fixtures via function
+  args, =parametrize= for data-driven tests, =raises= with
+  =match= for exception assertions.
+- (b) *Stdlib =unittest=.* No dependency, class-based
+  (=class TestX(unittest.TestCase)=), =self.assertEqual(x, y)=
+  verbose style.
+
+Nathan's answer: /TBD/ (strong leading: pytest — community default,
+less ceremony, better fits the Clojure-terse / Warsaw-minimal taste)
+
+*** Question 2 — Test function naming
+
+The presented version uses =test_<function>_<behavior>=:
+
+- =test_parse_user_splits_name_and_email=
+- =test_parse_user_strips_surrounding_whitespace=
+- =test_parse_user_rejects_missing_comma=
+
+Alternatives:
+
+- (a) *=test_<function>_<behavior>=* (presented). Tells you what
+  unit is under test and what property is being asserted.
+- (b) *=test_<behavior>=* — skip the function name when tests are
+  already organized by module or class.
+- (c) *=test_<number>= or =test_<expected_outcome>=* — less
+  informative, rare in modern Python.
+
+Nathan's answer: /TBD/
+
+*** Question 3 — Exception testing idiom
+
+Presented: =pytest.raises(ValueError, match='pattern')=. Matches
+exception type AND asserts the message contains the pattern.
+Alternatives: =raises(ValueError)= alone (no message check), or
+wrapping in a =try=/=except= with =pytest.fail()= on
+non-exception.
+
+- (a) *=pytest.raises(X, match=...)=* (presented) — assert type and
+  message pattern together.
+- (b) *=pytest.raises(X)= alone* — assert type only; message
+  assertions if any go in follow-up checks.
+- (c) *Manual =try=/=except= + =pytest.fail=* — verbose; use only
+  when you need access to the raised object for detailed assertions.
+
+Nathan's answer: /TBD/
+
+*** Question 4 — Parametrize for data-driven tests?
+
+Presented uses =@pytest.mark.parametrize= for the "many-malformed-
+inputs" case. Groups semantically-related test cases into one
+function body.
+
+- (a) *Use =parametrize= for exhaustive negative or equivalence-
+  class testing* (presented). One test function, many cases, each
+  reported individually in pytest output.
+- (b) *One test per case.* More code, but each case has a distinct
+  named test that shows up in test reports.
+- (c) *Parametrize only when the test body is complex enough that
+  duplicating it would be costly.*
+
+Nathan's answer: /TBD/
+
+*** Still on the table (not in this snippet)
+
+- *Integration-test demonstration.* Needs a real system boundary;
+  surfaces in single-file or multi-file stage.
+- *Test location convention* (=tests/= directory vs alongside
+  source). Multi-file stage.
+- *Fixture style* (function-scoped vs module-scoped; =@fixture=
+  vs autouse). Surfaces when tests need shared setup.
+- *Property-based testing* (=hypothesis=). Worth considering for
+  a future snippet if Nathan wants it in the style.
+
+*** Rule
+
+/To be recorded once Nathan answers./

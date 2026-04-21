@@ -89,7 +89,12 @@ The overarching [[file:../README.org][README.org]] is compiled from those findin
   sentences. All canonized into README.org under Formatting &
   Layout, Naming, Errors & Exceptions, and Comments & Docstrings.
   =@public= from =atpublic= deferred to the multi-file stage.
-- [ ] 007 — testing (the last untouched README section).
+- [-] 007 =test-parse-user= — pytest unit tests for a pure function
+  from 006. Meta-philosophy (integration-over-unit, unit for pure
+  complex functions, test behavior) already locked by Nathan's
+  global CLAUDE.md. Four questions open: framework (pytest vs
+  unittest), test function naming, exception testing idiom,
+  parametrize usage.
 
 ** TODO Stage 2: Single-file programs
 
