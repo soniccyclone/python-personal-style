@@ -107,7 +107,17 @@ move to single-file programs.
 
 ** TODO Stage 2: Single-file programs
 
-/Pending./
+/In progress./ See [[file:single-file/FINDINGS.org][single-file/FINDINGS.org]].
+
+- [-] 001 =parse-users= — CLI user-record validator. Extends
+  snippet 006 into a full single-module program with
+  =pyproject.toml= (hatchling + uv), src/tests layout,
+  pytest + hypothesis dev deps, CLI via argparse, =T | ParseError=
+  result type, logging to stderr, exit codes.
+- [ ] 002+ — escalate to full-application territory (FastAPI or a
+  real CLI) to pressure-test the style against logging, dependency
+  management, config, and observability concerns that toy programs
+  don't surface.
 
 ** TODO Stage 3: Multi-file programs
 

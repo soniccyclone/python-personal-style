@@ -3,3 +3,14 @@
 .dolt/
 *.db
 .beads-credential-key
+
+# Python / uv / pytest / hypothesis artifacts
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.hypothesis/
+.ruff_cache/

@@ -1,0 +1,22 @@
+#+TITLE: parse-users
+#+OPTIONS: toc:nil num:nil
+
+* What
+
+CLI that reads a line-delimited =name,email= file, validates each
+record, emits valid records as JSON to stdout, and reports parse
+failures to stderr. Exit code is 0 on clean runs, 1 if any records
+failed validation, 2 if the CLI itself misbehaved (file not found,
+etc.).
+
+* Usage
+
+#+begin_src sh
+  uv sync
+  uv run parse-users users.txt
+#+end_src
+
+* Design notes
+
+Design decisions and open questions live in the parent
+[[file:../FINDINGS.org][FINDINGS.org]] under the =001= heading.

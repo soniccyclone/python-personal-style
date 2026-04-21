@@ -1,0 +1,155 @@
+#+TITLE: Single-file Program Findings
+#+AUTHOR: Nathan Barlow
+#+OPTIONS: toc:2 num:nil
+#+STARTUP: showall
+
+* Purpose
+
+Per-program log of design decisions, nitpicks, and canonized rules
+for the single-file program stage. Each program has its own
+subdirectory with a =pyproject.toml=, =src/= layout, =tests/=, and
+its own venv managed by =uv=.
+
+Rules that apply across programs (packaging mechanics, tooling
+config, test layout) get canonized into the top-level [[file:../../README.org][README.org]]
+under the appropriate section (Packaging, Testing, etc.).
+Program-specific design decisions stay here.
+
+* Stage conventions
+
+- *Tooling*: =uv= for venv + lockfile + dep management.
+- *Layout*: =src/= layout inside each program directory. Tests in
+  sibling =tests/= directory.
+- *Build backend*: =hatchling= (standard, auto-detects modules with
+  =sources = ["src"]=).
+- *Python version*: pinned via =requires-python= in =pyproject.toml=;
+  target 3.14+ (PEP 649 default annotations, no =__future__= import
+  needed).
+- *Dev deps*: =[dependency-groups]= (PEP 735) over
+  =[project.optional-dependencies]= — cleaner, first-class in =uv=.
+- *Directory naming*: =NNN-kebab-name= matching the project slug.
+
+* Forward direction
+
+Program 001 is the on-ramp — light CLI, establishes the tooling
+baseline. Programs 002+ should escalate into real-application
+territory (FastAPI service or a substantive CLI with real I/O) to
+pressure-test the style against cross-cutting concerns (logging,
+dependency management, config, observability) that snippets can't
+surface.
+
+* Programs
+
+** TODO 001 — =parse-users= — CLI user-record validator
+
+Directory: [[file:001-parse-users/][001-parse-users/]]
+
+Extends snippet 006's =parse_user= into a complete CLI: reads a
+line-delimited =name,email= file, validates each record, emits
+valid users as JSON to stdout and parse errors to stderr with a
+non-zero exit code if any records failed.
+
+*** Design decisions
+
+**** Single module, not package
+
+The program fits comfortably in one =.py= file. =src/parse_users.py=
+is the whole module — no =src/parse_users/__init__.py= subpackage
+structure. Hatchling's default module auto-detection with
+=sources = ["src"]= handles this.
+
+**** =record= alias lives inline
+
+In a multi-file package the =record = partial(dataclass, ...)= alias
+would live in a shared utility module and be imported. For a
+single-file program it lives at the top of the module itself. Same
+pattern, different scope.
+
+**** Result type for per-line parsing
+
+=parse_user(line: str) -> User | ParseError=. Applies the =T |
+NamedFailure= rule from snippet 002. =ParseError= is a frozen
+dataclass carrying =line= and =reason= — enough context for the
+CLI to report what went wrong and at which input.
+
+**** Per-file indexing is the caller's responsibility
+
+=parse_user= doesn't know about line numbers; =parse_file= wraps
+its results into =list[tuple[int, User | ParseError]]=. Keeps
+=parse_user= a pure function of its input (good for property
+testing) and pushes bookkeeping to the layer that owns it.
+
+**** CLI via =argparse=
+
+Stdlib only — no =click=, no =typer=. For a small surface area,
+argparse is adequate and carries no dependency.
+
+**** Entry point via =[project.scripts]=
+
+The =parse-users= command is declared in =pyproject.toml= under
+=[project.scripts]= pointing at =parse_users:main=. No
+=if __name__ == "__main__":= block in the source — same rule as
+snippets ("demo blocks don't belong in source files"), honored by
+having =main= be directly callable and invoked via the script
+entry.
+
+**** Logging to stderr; JSON to stdout
+
+Standard Unix convention: stdout carries structured data the user
+might want to pipe; stderr carries diagnostic output. =log.error=
+for per-line parse errors, =print= (or =sys.stdout.write=) for
+the JSON. Exit code 0 for clean, 1 for any parse errors, 2 for
+file-not-found / CLI misuse.
+
+**** Tests: pytest + hypothesis
+
+=tests/test_parse_users.py= exercises the AAA style canonized in
+snippet 007. Property test via =@given= for the roundtrip invariant;
+example-based tests for specific error cases; =parametrize= for
+equivalence-class negative testing.
+
+*** Questions for Nathan
+
+**** Build backend — hatchling?
+
+Proposed: =hatchling= (the de-facto standard for new pyproject
+projects, auto-detects modules, minimal config). Alternatives:
+=flit_core= (simpler for single-module), =uv_build= (uv's own
+lightweight backend, newer, fewer moving parts).
+
+My lean: hatchling. Answer: /TBD/
+
+**** =uv= project-level config
+
+Any =[tool.uv]= settings we want as defaults? =uv= supports
+=dev-dependencies= style, workspace roots, index URL overrides,
+etc. For this program, I think the default behavior is fine — no
+=[tool.uv]= section.
+
+My lean: omit =[tool.uv]= unless we hit a reason. Answer: /TBD/
+
+**** Logging format and config
+
+For this program I'm using =logging.getLogger('parse_users')= and
+not configuring handlers — the CLI's =main= calls =logging.basicConfig=
+to set up stderr output. Is that the target pattern? Or do we want
+something more structured (=structlog=, JSON logs)? The latter
+probably escalates naturally when we hit FastAPI / a real app.
+
+My lean: =logging.basicConfig= at the CLI entry point; leave the
+module using =getLogger(__name__)=. Escalate to structured logging
+when the app grows to warrant it. Answer: /TBD/
+
+**** Linting + formatting — ruff as sole tool
+
+Proposed: =ruff= handles both linting (the =isort= import-sort
+rules we canonized, plus general lints) AND formatting (quote
+style, line length, whitespace). No separate =black= / =isort= /
+=flake8=. Warsaw's config adopted.
+
+My lean: ruff sole tool. Answer: /TBD/
+
+*** Rule
+
+/To be recorded once the program is reviewed and the questions
+above are resolved./
