@@ -1,0 +1,35 @@
+#+TITLE: bookmarks
+#+OPTIONS: toc:nil num:nil
+
+* What
+
+Minimal FastAPI service for short notes with tags. SQLite
+persistence, structured logging with request-ID correlation,
+env-driven configuration.
+
+* API
+
+| Method | Path                | Purpose                              |
+|--------+---------------------+--------------------------------------|
+| POST   | =/notes=            | Create a note from JSON body         |
+| GET    | =/notes=            | List all notes (optional =tag= filter) |
+| GET    | =/notes/{note_id}=  | Get a single note                    |
+| DELETE | =/notes/{note_id}=  | Delete a note                        |
+
+* Run
+
+#+begin_src sh
+  uv sync
+  uv run bookmarks
+  # or:
+  BOOKMARKS_PORT=8080 uv run bookmarks
+#+end_src
+
+Listens on =127.0.0.1:8000= by default. Override via
+=BOOKMARKS_HOST=, =BOOKMARKS_PORT=, =BOOKMARKS_DB_PATH=,
+=BOOKMARKS_LOG_LEVEL=.
+
+* Design notes
+
+Design decisions and open questions live in the parent
+[[file:../FINDINGS.org][FINDINGS.org]] under the =001= heading.

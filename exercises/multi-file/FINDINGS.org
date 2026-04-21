@@ -1,0 +1,175 @@
+#+TITLE: Multi-file Program Findings
+#+AUTHOR: Nathan Barlow
+#+OPTIONS: toc:2 num:nil
+#+STARTUP: showall
+
+* Purpose
+
+Per-program log for multi-file application projects. Programs in
+this stage are real-application territory — FastAPI services, CLIs
+with substantive scope — that pressure-test the style rules derived
+from snippets and single-file programs against cross-cutting
+concerns: logging context propagation, dependency management at
+scale, config hierarchy, observability, error handling across
+layers, and integration testing at depth.
+
+Rules that generalize across programs get canonized into the
+top-level [[file:../../README.org][README.org]]. Program-specific decisions stay here.
+
+* Stage conventions
+
+Carry forward from single-file (uv, src/ layout, hatchling /
+uv_build as build backends, tests/unit + tests/integration split,
+Warsaw formatting, structlog, the =record= alias) — extended with:
+
+- *Package layout*: =src/<package_name>/= with an =__init__.py=
+  exporting whatever the package publicizes. No top-level
+  single-file module.
+- *Module decomposition*: split by /concern/, not by data type. A
+  typical layout: =config.py= (env-driven settings), =db.py=
+  (persistence functions), =logging.py= (configuration +
+  context), =api.py= (HTTP surface), =main.py= (entry point).
+  Not one module per record type.
+- *Record / schema reuse*: the =record= alias lives in a shared
+  utility module (e.g. =src/<pkg>/_record.py=) and is imported by
+  every module that declares a domain record. Keeps all record
+  declarations uniform.
+
+* Programs
+
+** TODO 001 — =bookmarks= — FastAPI bookmarks service
+
+Directory: [[file:001-bookmarks/][001-bookmarks/]]
+
+A minimal bookmarks / TIL (today-I-learned) service. Persist short
+notes with tags. API: create, list (optionally filtered by tag),
+get one, delete one. SQLite backend. Pydantic for HTTP schemas;
+=@record= for domain records. Pydantic-settings for config via env
+vars. Request-scoped correlation IDs propagated via
+=contextvars=. Structlog with JSON renderer to stderr. Tests:
+unit tests over the DB layer with in-memory SQLite; integration
+tests via FastAPI's =TestClient= against a scratch DB.
+
+*** Design decisions
+
+**** Module decomposition
+
+- =config.py= — =Settings= class (pydantic-settings), env-driven
+  with defaults. Read via a =get_settings()= DI provider.
+- =db.py= — sqlite3 functions. Hand-written SQL, no ORM. Pure
+  functions operating on a =Connection=: =insert_note=,
+  =list_notes=, =get_note=, =delete_note=, =create_schema=.
+- =logging.py= — =configure_logging()=, request-ID context var,
+  structlog processor that injects request ID into every event,
+  and the =@logged= decorator from 001 ported across.
+- =api.py= — FastAPI app factory (=create_app(settings)=),
+  middleware (request-ID + per-request structured logging),
+  pydantic request/response schemas, routes, DI providers for DB
+  connection.
+- =main.py= — =main()= that configures logging and calls
+  =uvicorn.run(create_app())=.
+- =__init__.py= — exports =create_app=, =main=; nothing else.
+
+**** Records vs pydantic models
+
+Two schema systems with a deliberate boundary:
+
+- =pydantic.BaseModel= subclasses for HTTP request bodies
+  (=NoteCreate=) and the outgoing representation when FastAPI
+  needs it — validates incoming JSON, shapes outgoing JSON.
+- =@record= frozen dataclasses for domain types (=Note=). Used
+  throughout the DB layer and application logic. Serialized to
+  dict at the HTTP boundary when returning from routes.
+
+Pydantic models carry methods (=.model_dump=, =.model_validate=,
+etc.); they're not records under our taxonomy — they're
+schema-with-validation-behavior objects that live at the HTTP
+boundary. Domain records stay =@record=.
+
+**** Tags as JSON column, filtered via SQLite =json_each=
+
+Tags are stored as a JSON string in a single column rather than a
+separate tags-and-notes-tags join. Scope-appropriate. Filtering by
+tag uses SQLite's JSON1 extension: =WHERE EXISTS (SELECT 1 FROM
+json_each(tags) WHERE value = ?)=.
+
+**** App factory, not module-level =app= global
+
+=create_app(settings)= builds and returns the =FastAPI= instance.
+No =app = FastAPI()= at module scope — matches the no-import-time-
+side-effects rule. Tests construct their own app with
+test-specific settings and dependency overrides.
+
+**** Request-ID correlation via =contextvars=
+
+A =request_id_var: ContextVar[str | None]= is set by middleware at
+request start (reading =X-Request-ID= from the incoming headers or
+generating a UUID), and read by a structlog processor that injects
+it into every log event emitted during the request. Response
+header =X-Request-ID= echoes the value so callers can correlate.
+
+Outside a request (during startup, shutdown, CLI invocation) the
+context var is unset and the processor emits no =request_id= key.
+
+**** Middleware for HTTP-level logging, not =@logged= on routes
+
+Route handlers don't carry =@logged=. Instead, a single HTTP
+middleware logs =request_start= / =request_end= / =request_error=
+for every route uniformly. The middleware captures method, path,
+status code, duration. Per-route decoration would be noise.
+
+=@logged= (ported from 001) applies to =main()= and other
+non-route entry points (e.g. DB migrations, background tasks if
+we add them).
+
+**** Config via pydantic-settings, =BOOKMARKS_= env prefix
+
+#+begin_src python
+class Settings(BaseSettings):
+    db_path: Path = Path('bookmarks.db')
+    host: str = '127.0.0.1'
+    port: int = 8000
+    log_level: str = 'INFO'
+
+    model_config = SettingsConfigDict(env_prefix='BOOKMARKS_')
+#+end_src
+
+Env vars: =BOOKMARKS_DB_PATH=, =BOOKMARKS_HOST=, =BOOKMARKS_PORT=,
+=BOOKMARKS_LOG_LEVEL=. Defaults are dev-friendly. A
+=.env= file would work too (pydantic-settings supports it) — not
+adding one for 001 since we're running from a shell.
+
+*** Questions for Nathan
+
+**** DB access — thread-local per-request connection, or connection pool?
+
+sqlite3 connections aren't thread-safe by default. FastAPI runs
+request handlers in a threadpool (for sync handlers). Simplest:
+open a new connection per request via DI, close on teardown.
+Alternative: =check_same_thread=False= + a connection pool. For
+the scope here, per-request connections are fine.
+
+My lean: per-request via DI. Answer: /TBD/
+
+**** Pydantic or pydantic-settings for env?
+
+Pydantic-settings is the explicit env-var loader. Alternatives:
+plain =os.environ= access in a config function, or stdlib
+=configparser= for file-based config. Pydantic-settings gives us
+validation + type coercion + env-file support + nested settings
+for free.
+
+My lean: pydantic-settings. Answer: /TBD/
+
+**** structlog processor for request ID — where to apply?
+
+The processor that reads =request_id_var= can go at the top of the
+processor chain (runs for every log) or be opted in per-call. Top
+of chain is simpler; no log inside a request ever forgets to
+include the ID.
+
+My lean: top-of-chain, automatic. Answer: /TBD/
+
+*** Rule
+
+/To be recorded once Nathan reviews./

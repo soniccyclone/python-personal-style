@@ -109,19 +109,25 @@ move to single-file programs.
 
 /In progress./ See [[file:single-file/FINDINGS.org][single-file/FINDINGS.org]].
 
-- [-] 001 =parse-users= — CLI user-record validator. Extends
-  snippet 006 into a full single-module program with
-  =pyproject.toml= (hatchling + uv), src/tests layout,
-  pytest + hypothesis dev deps, CLI via argparse, =T | ParseError=
-  result type, logging to stderr, exit codes.
-- [ ] 002+ — escalate to full-application territory (FastAPI or a
-  real CLI) to pressure-test the style against logging, dependency
-  management, config, and observability concerns that toy programs
-  don't surface.
+- [X] 001 =parse-users= — CLI user-record validator. Stream-based
+  parser, structlog with decorator-based entry/exit/error logging,
+  configure_logging deferred until CLI invocation (no import-time
+  side effects), unit/integration test split, uv_build backend.
+  Generalizable rules canonized.
+
+Single-file ended at 001. Stage transitions to multi-file below.
 
 ** TODO Stage 3: Multi-file programs
 
-/Pending./
+/In progress./ See [[file:multi-file/FINDINGS.org][multi-file/FINDINGS.org]].
+
+- [-] 001 =bookmarks= — FastAPI bookmarks service. First real-app
+  pressure test: FastAPI + SQLite + pydantic-settings + structlog
+  with request-ID context propagation via =contextvars=. Package
+  layout =src/bookmarks/= split by concern (config, db, logging,
+  api, main). App factory pattern, no module-level =FastAPI()=.
+  Tests split unit (in-memory SQLite, pure DB functions) /
+  integration (TestClient against per-test scratch DB).
 
 ** TODO Compile final README
 
