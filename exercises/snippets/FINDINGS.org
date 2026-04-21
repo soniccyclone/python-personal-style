@@ -1134,30 +1134,45 @@ The non-from imports are already length-sorted (=json= 4 chars <
 
 *** Question 1 — =from __future__ import annotations= by default?
 
-The presented version starts with =from __future__ import
-annotations=. This makes all annotations in the module evaluated as
-strings at runtime (lazy), which:
+Nathan's answer: *(c) never include.* The future import solves
+three narrow problems: self-referential class methods
+(=def add(self, other: Point)= inside =class Point=), circular
+type-only imports, and using newer annotation syntax on older
+Pythons. None of these apply to this style:
 
-- Eliminates the need for quoted forward references
-  (=other: "Point"=) or =TYPE_CHECKING= guards for
-  circular-import-only-at-type-level cases.
-- Slightly cheaper at module import time (annotations aren't evaluated
-  unless =typing.get_type_hints()= or similar is called).
-- Matches PEP 563 / PEP 649 direction.
+- Self-referential methods don't come up — records are pure data
+  (no methods), behavior is free functions, so the self-reference
+  case is structurally rare.
+- Circular type-only imports show up in big cross-module type DAGs.
+  Not applicable here.
+- Older-Python compatibility isn't a concern — we target modern
+  Python (3.10+ features like =slots=True=, =str | None= already
+  canonized; 3.14+ is the baseline going forward).
 
-Cost: annotations become strings at runtime. Libraries that introspect
-annotations (=pydantic=, =dataclass='s own field resolution,
-=attrs=, etc.) must handle stringified forms. Most modern libraries
-do, but the behavior can surprise.
+On Python 3.14+, PEP 649 made lazy-annotation evaluation the
+default, so =from __future__ import annotations= is entirely
+redundant. Don't include it.
 
-- (a) *Include =from __future__ import annotations= at the top of
-  every module by default* (presented).
-- (b) *Include only when a module needs it* — i.e. when it has
-  forward references or circular-import-at-type-level.
-- (c) *Never include* — rely on Python 3.14+ PEP 649 behavior
-  becoming default.
+Revised (v3) drops the future import entirely:
 
-Nathan's answer: /TBD/
+#+begin_src python
+import json
+import logging
+
+from pathlib import Path
+
+
+log = logging.getLogger(__name__)
+
+
+def load_json(path: Path) -> dict:
+    log.debug("loading %s", path)
+    return json.loads(path.read_text())
+
+
+def save_json(path: Path, data: dict) -> None:
+    path.write_text(json.dumps(data, indent=2))
+#+end_src
 
 *** Question 2 — =import X= vs =from X import Y=
 

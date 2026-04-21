@@ -49,8 +49,14 @@ references above follows PEP 8.
 
 Reference: Barry Warsaw's [[https://barry.warsaw.us/software/STYLEGUIDE.txt][STYLEGUIDE.txt]].
 
-- *=__future__= imports go at the very top*, above every other
-  import. Standalone, no blank line before them.
+- *Don't include =from __future__ import annotations=.* Targeting
+  Python 3.14+, which made PEP 649 lazy-annotation behavior the
+  default — the future import is redundant. The three cases it
+  used to solve (self-referential class methods, circular type-only
+  imports, newer annotation syntax on older Pythons) either don't
+  apply to this style (records don't have self-referential methods;
+  records don't create cross-module type DAGs) or aren't a concern
+  (we target modern Python, not 3.9 compat).
 - *Four groups, separated by blank lines*, in this order:
   1. Non-from imports from stdlib and third-party (=import json=).
   2. Non-from imports from the application (local).
