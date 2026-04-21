@@ -93,6 +93,63 @@ arguments. Python translation below.
   =__eq__= / =__repr__= would be wrong. Those are a separate
   category from records; the rules above don't constrain them.
 
+*Polymorphism over records* follows CLOS:
+
+- *=@functools.singledispatch= is the polymorphism mechanism.* Stdlib.
+  Closest Python analog to =defgeneric= / =defmethod=. No third-party
+  multi-dispatch for single-arg cases; no =isinstance= branching; no
+  ABC with overridden methods.
+
+  #+begin_src python
+    from functools import singledispatch
+
+    @singledispatch
+    def area(shape: object) -> float:
+        raise NotImplementedError(f"area for {type(shape).__name__}")
+
+    @area.register
+    def _(shape: Circle) -> float:
+        return pi * shape.radius ** 2
+
+    @area.register
+    def _(shape: Square) -> float:
+        return shape.side ** 2
+  #+end_src
+
+- *Registered implementations use =_= as the name.* Not
+  =area_circle=, not the generic name re-used. =_= prevents
+  importable module-level bypass paths — =from shapes import
+  area_circle= with a descriptive name lets callers skip the
+  dispatch entirely, which defeats the polymorphism. With =_=, only
+  the last =_= is reachable at module scope (each =def _= shadows
+  the previous) and the leading underscore is Python's "private"
+  signal; =area(shape)= becomes the only usable entry point.
+- *The base function raises =NotImplementedError= on unregistered
+  types*, with a message naming the unknown type:
+  =raise NotImplementedError(f"{fn} for {type(x).__name__}")=.
+  Dispatch failure is a programmer error, genuinely exceptional;
+  exceptions are the right tool. Stdlib convention
+  (=NotImplementedError= as the marker for un-overridden polymorphic
+  stubs) agrees.
+- *No shared interface marker for participating records.* Records
+  stay independent; the binding is the set of registered methods
+  on the generic function. No =Shape= Protocol, no =Shape= ABC. A
+  local union alias is fine as a downstream typing convenience
+  (=def total_area(shapes: list[Shape])=) but doesn't flow from the
+  dispatch pattern itself.
+- *The Pylance reach-ability gap is accepted.* Pyright's typeshed
+  stub for =singledispatch= types the wrapper as
+  =(*args: Any, **kwargs: Any) -> _T= — so =area(42)= passes
+  type-checking and fails at runtime with =NotImplementedError=. No
+  =@overload= declarations to close the gap (ceremony that creates
+  importable bypass vectors and triples the touchpoints per new
+  dispatch); no =.pyi= stub generation (working around an IDE
+  limitation with a build-time ecosystem is the wrong shape of
+  response). Pyright is a static-only LSP with no plugin system;
+  dynamic dispatch is outside its scope by design. Runtime
+  =NotImplementedError= is the backstop. Navigate via find-references
+  on the record type; introspect at runtime via =fn.registry=.
+
 ** Types & Annotations
 
 - *Return types tell the whole story.* A function's return annotation

@@ -62,11 +62,17 @@ The overarching [[file:../README.org][README.org]] is compiled from those findin
   Plain class ruled out of the records question — it's a separate
   category for lifecycle objects. Polymorphism mechanism (Q4)
   deferred to the next snippet.
-- [-] 004 =shapes= — polymorphism via =@singledispatch=. Four
-  questions posed: mechanism choice (singledispatch vs multi-dispatch
-  vs isinstance vs ABC), inner-function naming inside =@register=,
-  base-function behavior on unknown types, and whether shapes should
-  share a declared interface.
+- [X] 004 =shapes= — polymorphism via =@singledispatch=. Canonical
+  form is plain: =@singledispatch= base typed =shape: object=,
+  =_= throwaway for registered handlers, =NotImplementedError= on
+  unknown types, no shared interface marker. Extended exploration
+  ruled out =@overload= ceremony (bypass vectors + ergonomic
+  duplication), third-party libraries (no Pylance win over stdlib),
+  and build-time =.pyi= generation (style shouldn't compensate for
+  IDE limitations). Pylance reach-ability gap accepted; runtime
+  =NotImplementedError= is the backstop. Multi-dispatch deferred
+  until a snippet needs binary operations.
+- [ ] 005 — imports (upcoming; highest-ROI untouched section).
 
 ** TODO Stage 2: Single-file programs
 
