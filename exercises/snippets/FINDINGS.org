@@ -1032,7 +1032,7 @@ no ABC.
 
 File: [[file:005-imports.py][005-imports.py]]
 
-Presented version:
+*** Presented (v1)
 
 #+begin_src python
 from __future__ import annotations
@@ -1054,8 +1054,83 @@ def save_json(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data, indent=2))
 #+end_src
 
-Minimal but exercises three import-style decisions that show up in
-every Python file.
+*** Reference — Barry Warsaw's style guide
+
+Nathan added Barry Warsaw
+([[https://barry.warsaw.us/software/STYLEGUIDE.txt][STYLEGUIDE.txt]]) as a third style reference, subordinate to
+Clojure core and CLOS. Warsaw's Python-specific mechanics fill gaps
+the Lisp-family references don't cover — imports in particular are
+his most detailed section.
+
+*Known conflict with our existing rules, resolved:* Warsaw
+prescribes docstrings on all modules/functions/classes/methods; our
+canonized rule (from 001) is "no docstring on small
+self-explanatory functions." The Lisp-derived rule wins. Warsaw's
+"document everything" stance is /not/ adopted.
+
+*** Warsaw's import rules
+
+Applied below. From the source:
+
+- Imports go at the top of the file, after comments/docstrings and
+  after =__future__= imports, before module globals.
+- *Four-group scheme* (not PEP 8's three):
+  1. Non-from imports from stdlib + third-party.
+  2. Non-from imports from the application (local).
+  3. From-imports from stdlib + third-party.
+  4. From-imports from the application (local).
+- From-imports follow non-from imports (groups 3 and 4 follow 1 and 2).
+- Dotted imports follow non-dotted imports within a group.
+- *Non-dotted imports sort by increasing length* (=import a=
+  before =import bb= before =import ccc=).
+- *Dotted imports sort alphabetically.*
+- Two blank lines after the imports block before module-level code.
+
+The primary axis is import /style/ (=import X= vs =from X import
+Y=), not just origin. The rationale is visual — grouping like-shaped
+lines together means the eye can scan each group uniformly.
+
+Warsaw ships a ruff config that enforces this exactly:
+
+#+begin_src toml
+[tool.ruff.lint.isort]
+case-sensitive = true
+length-sort-straight = true
+lines-after-imports = 2
+lines-between-types = 1
+order-by-type = true
+section-order = ['standard-library', 'third-party', 'local-folder', 'first-party']
+#+end_src
+
+*** Revised (v2) — Warsaw grouping applied
+
+#+begin_src python
+from __future__ import annotations
+
+import json
+import logging
+
+from pathlib import Path
+
+
+log = logging.getLogger(__name__)
+
+
+def load_json(path: Path) -> dict:
+    log.debug("loading %s", path)
+    return json.loads(path.read_text())
+
+
+def save_json(path: Path, data: dict) -> None:
+    path.write_text(json.dumps(data, indent=2))
+#+end_src
+
+One structural change from v1: a blank line between the non-from
+stdlib imports (=json=, =logging=) and the from-import
+(=from pathlib import Path=). Under Warsaw's scheme they're in
+separate groups (1 and 3), so they're separated by a blank line.
+The non-from imports are already length-sorted (=json= 4 chars <
+=logging= 7 chars).
 
 *** Question 1 — =from __future__ import annotations= by default?
 
@@ -1112,26 +1187,14 @@ Nathan's answer: /TBD/
 
 *** Question 3 — Grouping and ordering
 
-The presented version follows PEP 8's group order:
+Nathan's answer: *Warsaw's four-group scheme* (non-from stdlib/3rd,
+non-from local, from stdlib/3rd, from local). Length-sort within
+non-from imports; alphabetical within from-imports. Enforced by
+ruff's isort config above.
 
-1. =__future__= imports (alone, at top)
-2. Standard library
-3. Third-party
-4. First-party / local
-
-Groups separated by a blank line. Within each group, alphabetical
-ordering.
-
-- (a) *PEP 8 groups, alphabetical within each* (presented; also
-  what tools like =isort= / =ruff= =I= rules enforce).
-- (b) *PEP 8 groups, logical grouping within each* (e.g. grouping
-  by purpose: =import json; import yaml= together regardless of
-  alphabet).
-- (c) *No grouping, just alphabetical.*
-- (d) *Grouping but length-ordered within each* (short imports
-  first, for visual tidiness).
-
-Nathan's answer: /TBD/
+The primary grouping is by import /style/ (=import X= vs =from X
+import Y=), not just by origin — more granular than PEP 8's three
+groups. Rationale is visual uniformity per group.
 
 *** Still on the table (not in this snippet)
 

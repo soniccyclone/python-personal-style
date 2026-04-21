@@ -18,6 +18,25 @@ sharpening of, PEP 8 based on lived preference.
 /Not yet compiled./ See [[file:exercises/LEDGER.org][exercises/LEDGER.org]] for the
 work-in-progress ledger.
 
+* References
+
+This style guide is anchored by three references, in precedence order:
+
+1. *Clojure core* — [[https://github.com/clojure/clojure/blob/clojure-1.12.4/src/clj/clojure/core_print.clj][clojure/core_print.clj]]. Taste anchor for
+   terseness, prose-not-template docstrings, docstrings only on
+   public API, dense ceremony-free code.
+2. *CLOS* (Common Lisp Object System) — [[https://lispcookbook.github.io/cl-cookbook/clos.html][cl-cookbook/clos.html]]. Class
+   system anchor for data/behavior separation, =defclass= as slot
+   spec, generic functions, polymorphism via dispatch-on-types.
+3. *Barry Warsaw's style guide* — [[https://barry.warsaw.us/software/STYLEGUIDE.txt][barry.warsaw.us/software/STYLEGUIDE.txt]].
+   Python-specific mechanics — imports, line length, quotes, etc.
+   Subordinate to the Lisp-family references; where Warsaw conflicts
+   with a rule derived from Clojure or CLOS, the Lisp-family rule
+   wins.
+
+PEP 8 is the implicit floor: anything not overridden by the three
+references above follows PEP 8.
+
 * Rules
 
 /To be filled in as the exercise progresses./
@@ -27,6 +46,40 @@ work-in-progress ledger.
 ** Naming
 
 ** Imports
+
+Reference: Barry Warsaw's [[https://barry.warsaw.us/software/STYLEGUIDE.txt][STYLEGUIDE.txt]].
+
+- *=__future__= imports go at the very top*, above every other
+  import. Standalone, no blank line before them.
+- *Four groups, separated by blank lines*, in this order:
+  1. Non-from imports from stdlib and third-party (=import json=).
+  2. Non-from imports from the application (local).
+  3. From-imports from stdlib and third-party
+     (=from pathlib import Path=).
+  4. From-imports from the application (local).
+
+  The primary axis is import /style/ (=import X= vs =from X import
+  Y=), not just origin — more granular than PEP 8's three-group
+  scheme. Rationale: visual uniformity per group.
+- *Dotted imports follow non-dotted within a group.*
+  =import os= before =import os.path=.
+- *Non-dotted imports sort by increasing length*: =import os= before
+  =import json= before =import logging=. Deliberately visual — short
+  lines stack neatly, longer lines below.
+- *Dotted and from-imports sort alphabetically.*
+- *Two blank lines between the import block and module-level code.*
+
+The Warsaw-canonical ruff config that enforces all of this:
+
+#+begin_src toml
+  [tool.ruff.lint.isort]
+  case-sensitive = true
+  length-sort-straight = true
+  lines-after-imports = 2
+  lines-between-types = 1
+  order-by-type = true
+  section-order = ['standard-library', 'third-party', 'local-folder', 'first-party']
+#+end_src
 
 ** Records & Behavior
 
