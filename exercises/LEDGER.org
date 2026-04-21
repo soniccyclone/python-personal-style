@@ -72,14 +72,16 @@ The overarching [[file:../README.org][README.org]] is compiled from those findin
   IDE limitations). Pylance reach-ability gap accepted; runtime
   =NotImplementedError= is the backstop. Multi-dispatch deferred
   until a snippet needs binary operations.
-- [-] 005 =imports= — Warsaw's STYLEGUIDE.txt adopted as the
-  reference, subordinate to Clojure and CLOS. Q3 (grouping and
-  ordering) resolved with Warsaw's four-group scheme: non-from
-  stdlib/3rd, non-from local, from stdlib/3rd, from local;
-  length-sort within non-from, alphabetical within from. Ruff
-  config recorded. Q1 (=from __future__ import annotations= by
-  default?) and Q2 (when to prefer =import X= vs =from X import Y=)
-  still open.
+- [X] 005 =imports= — Warsaw's STYLEGUIDE.txt adopted as the third
+  reference (subordinate to Clojure and CLOS). All three questions
+  resolved: Q1 drop =from __future__ import annotations= (Python
+  3.14+ PEP 649 default makes it redundant); Q2 =import X= by
+  default, =from X import Y= only for heavily-used focused names;
+  Q3 Warsaw's four-group scheme with length-sort within non-from
+  and alphabetical within from-imports. Wildcard imports, relative
+  vs absolute, =__all__= / =@public=, and =TYPE_CHECKING= guards
+  all noted as deferred for later stages.
+- [ ] 006 — /pending selection/.
 
 ** TODO Stage 2: Single-file programs
 

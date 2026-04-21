@@ -1028,7 +1028,7 @@ no ABC.
    limitations. Pyright's static-only design can't see
    runtime-built dispatch tables; the style doesn't compensate.
 
-** TODO 005 — =005-imports.py= — imports: grouping, style, future annotations
+** DONE 005 — =005-imports.py= — imports: grouping, style, future annotations
 
 File: [[file:005-imports.py][005-imports.py]]
 
@@ -1176,29 +1176,19 @@ def save_json(path: Path, data: dict) -> None:
 
 *** Question 2 — =import X= vs =from X import Y=
 
-The presented version mixes both:
+Nathan's answer: *(a) module-style by default, name-style only when
+one or two focused names are used heavily.* The presented snippet
+demonstrates the pattern: =import json= and =import logging= keep
+the use sites qualified (=json.loads=, =logging.getLogger=) — the
+module provenance is visible at the call site, so the reader can
+tell at a glance which library a function came from. =from pathlib
+import Path= is name-style because =Path= appears in every
+signature; carrying =pathlib.Path= everywhere would be ceremony.
 
-#+begin_src python
-import json              # module-style
-import logging           # module-style
-from pathlib import Path # name-style
-#+end_src
-
-Conventions possible:
-
-- (a) *Module-style (=import X=) by default; name-style only when
-  you use one or two focused names heavily.* The presented example
-  uses name-style for =Path= because it's mentioned in every
-  signature; module-style for =json= and =logging= because the
-  functions stay qualified (=json.loads=, =logging.getLogger=) which
-  aids readability ("this came from logging, not some local
-  function").
-- (b) *Name-style (=from X import Y=) by default* — shorter at use
-  sites. Cost: losing module provenance at the use site.
-- (c) *Always module-style.* Maximum explicitness, verbose call
-  sites.
-
-Nathan's answer: /TBD/
+The rule: lean toward qualified calls to preserve provenance; reach
+for =from X import Y= only when the unqualified name earns its
+keep by appearing frequently enough that the qualifier becomes
+noise.
 
 *** Question 3 — Grouping and ordering
 
@@ -1214,16 +1204,28 @@ groups. Rationale is visual uniformity per group.
 *** Still on the table (not in this snippet)
 
 - *Wildcard imports* (=from X import *=). Usually rejected outright;
-  worth confirming.
+  worth confirming in a later snippet.
 - *Relative vs absolute imports* within a package. Surfaces in the
   multi-file stage.
-- *=__all__=* declarations. Surfaces when we have a module that
+- *=__all__=* declarations, and Warsaw's =@public= decorator from
+  =atpublic= as an alternative. Surfaces when we have a module that
   exports a coherent public API — probably single-file or
   multi-file stage.
 - *=typing.TYPE_CHECKING= guard* for import-only-for-type-hints
   cases. Would show up in a later snippet if we hit a circular
   type-only import.
 
-*** Rule
+*** Rules canonized from this snippet
 
-/To be recorded once Nathan answers./
+1. *Don't include =from __future__ import annotations=.* Target
+   Python 3.14+ where PEP 649 made lazy-annotation evaluation the
+   default; the future import is redundant.
+2. *Module-style (=import X=) by default; name-style (=from X
+   import Y=) only when one or two focused names are used heavily.*
+   Qualified call sites preserve module provenance for the reader.
+3. *Warsaw's four-group scheme*: non-from stdlib/3rd, non-from
+   local, from stdlib/3rd, from local. Separated by blank lines.
+4. *Non-dotted imports sort by increasing length*; dotted and
+   from-imports sort alphabetically.
+5. *Two blank lines between the import block and module-level
+   code.*

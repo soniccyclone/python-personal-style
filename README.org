@@ -57,6 +57,14 @@ Reference: Barry Warsaw's [[https://barry.warsaw.us/software/STYLEGUIDE.txt][STY
   apply to this style (records don't have self-referential methods;
   records don't create cross-module type DAGs) or aren't a concern
   (we target modern Python, not 3.9 compat).
+- *=import X= by default; =from X import Y= only when one or two
+  focused names are used heavily.* Qualified call sites
+  (=json.loads(...)=, =logging.getLogger(...)=) preserve module
+  provenance — the reader can tell at a glance which library a
+  function came from. Reach for =from X import Y= when the
+  unqualified name earns its keep by appearing frequently enough
+  that the qualifier becomes noise (e.g. =Path= in a module where
+  every signature takes one).
 - *Four groups, separated by blank lines*, in this order:
   1. Non-from imports from stdlib and third-party (=import json=).
   2. Non-from imports from the application (local).
